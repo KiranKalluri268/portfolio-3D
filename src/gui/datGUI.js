@@ -37,9 +37,9 @@ export function createConfigGUI(changePerformanceQuality, saveScreenshot) {
 
   function addBloomConfig() {
     const bloomConfig = {
-      strength: 0.8,
+      strength: 1,
       radius: 0.5,
-      threshold: 0.1
+      threshold: 0.55
     };
 
     const bloomFolder = gui.addFolder('Bloom')
@@ -54,12 +54,14 @@ export function createConfigGUI(changePerformanceQuality, saveScreenshot) {
     const cameraConfig = {
       distance: 25,
       orbit: true,
-      fov: 90.0
+      fov: 90.0,
+      enableDrag: false  // off by default — visitors scroll only, no mouse orbit
     }
     const observerFolder = gui.addFolder('Observer')
     // observerFolder.add(cameraConfig, 'distance', 3, 25)
     observerFolder.add(cameraConfig, 'fov', 30, 90)
     observerFolder.add(cameraConfig, 'orbit')
+    observerFolder.add(cameraConfig, 'enableDrag').name('Mouse Drag')
     observerFolder.open()
     return cameraConfig
   }

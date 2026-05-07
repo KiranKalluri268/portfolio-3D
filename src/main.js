@@ -51,11 +51,14 @@ import { createConfigGUI } from './gui/datGUI';
   const stats = createStatsGUI();
   document.body.appendChild(stats.dom);
 
+  const DEFAULT_ELEVATION = 5 * Math.PI / 180 // 5° — default camera elevation above disk
+
   // start loop
   update();
 
 
   // UPDATING
+
   function update() {
     delta = (Date.now() - lastframe) / 1000
     time += delta
@@ -63,7 +66,7 @@ import { createConfigGUI } from './gui/datGUI';
     // scroll logic
     const scrollHeight = document.body.scrollHeight - window.innerHeight;
     const scrollFraction = Math.max(0, Math.min(1, window.scrollY / scrollHeight));
-    cameraConfig.distance = 25 - (22 * scrollFraction);
+    cameraConfig.distance = 18 - (14 * scrollFraction);
 
     // update peripherals
     stats.update()
@@ -75,6 +78,11 @@ import { createConfigGUI } from './gui/datGUI';
     // update renderer
     observer.update(delta)
     cameraControl.update(delta)
+
+    // when drag is OFF, smoothly spring elevation back to default
+    if (!cameraConfig.enableDrag) {
+      observer.elevationAngle += (DEFAULT_ELEVATION - observer.elevationAngle) * 5 * delta
+    }
 
     // update shader variables
     updateUniforms()
@@ -116,6 +124,7 @@ import { createConfigGUI } from './gui/datGUI';
     observer.distance = cameraConfig.distance
     observer.moving = cameraConfig.orbit
     observer.fov = cameraConfig.fov
+    cameraControl.enabled = cameraConfig.enableDrag  // gate mouse drag via GUI toggle
     uniforms.lorentz_transform.value = effectConfig.lorentz_transform
     uniforms.accretion_disk.value = effectConfig.accretion_disk
     uniforms.use_disk_texture.value = effectConfig.use_disk_texture

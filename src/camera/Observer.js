@@ -17,15 +17,15 @@ export class Observer extends THREE.PerspectiveCamera {
     // options
     this.moving = false
     this.timeDilation = false
-    this.incline = -5 * Math.PI / 180
+
+    // Spherical orbit angles — elevation is fixed above disk plane
+    this.elevationAngle = 5 * Math.PI / 180  // 5° above disk, always positive
   }
 
-  // sets position, r vector, direction by supplying distance from center
+  // sets r and rescales position to new radius
   set distance(r) {
     this.r = r
-    // w
     this.maxAngularVelocity = 1 / Math.sqrt(2.0 * (r - 1.0)) / this.r
-    // p
     this.position.normalize().multiplyScalar(r)
   }
 
@@ -33,15 +33,27 @@ export class Observer extends THREE.PerspectiveCamera {
     return this.r
   }
 
-  setDirection(pitch, yaw) {
-    let originalDirection = new THREE.Vector3(0, 0, -1)
-    let rotation = new THREE.Euler(0, 0, 0, 'YXZ')
-    rotation.set(pitch, yaw, 0)
+  // Recomputes position, velocity, and direction from current theta + elevationAngle.
+  // Called at end of update() and by CameraDragControls after drag input.
+  applyOrbitPosition() {
+    const sin = Math.sin(this.theta)
+    const cos = Math.cos(this.theta)
+    const cosElev = Math.cos(this.elevationAngle)
+    const sinElev = Math.sin(this.elevationAngle)
 
-    let newDirection = new THREE.Vector3()
-    newDirection.copy(originalDirection).applyEuler(rotation)
-
-    this.direction = newDirection.normalize();
+    this.position.set(
+      this.r * cosElev * sin,
+      this.r * sinElev,          // constant positive Y — always above disk
+      this.r * cosElev * cos
+    )
+    // Tangential velocity stays in XZ plane
+    this.velocity.set(
+      cosElev * cos * this.angularVelocity,
+      0,
+      -cosElev * sin * this.angularVelocity
+    )
+    // Look-at: always point toward origin — no Euler gimbal, no roll
+    this.direction.copy(this.position).negate().normalize()
   }
 
   update(delta) {
@@ -52,21 +64,8 @@ export class Observer extends THREE.PerspectiveCamera {
       this.delta = delta
     }
 
-    // update angle of the camera, orbits around
+    // advance orbit angle
     this.theta += this.angularVelocity * this.delta
-    let cos = Math.cos(this.theta)
-    let sin = Math.sin(this.theta)
-
-
-    // set position according to the angle above
-    this.position.set(this.r * sin, 0, this.r * cos)
-    // change direction of movement
-    this.velocity.set(cos * this.angularVelocity, 0, -sin * this.angularVelocity)
-
-    // give some incline to camera
-    let inclineMatrix = (new THREE.Matrix4()).makeRotationX(this.incline)
-    this.position.applyMatrix4(inclineMatrix)
-    this.velocity.applyMatrix4(inclineMatrix)
 
     if (this.moving) {
       // accel
@@ -74,9 +73,8 @@ export class Observer extends THREE.PerspectiveCamera {
         this.angularVelocity += this.delta / this.r
       else
         this.angularVelocity = this.maxAngularVelocity
-
     } else {
-      // deccel
+      // decel
       if (this.angularVelocity > 0.0)
         this.angularVelocity -= this.delta / this.r
       else {
@@ -85,6 +83,7 @@ export class Observer extends THREE.PerspectiveCamera {
       }
     }
 
+    this.applyOrbitPosition()
     this.time += this.delta
   }
 

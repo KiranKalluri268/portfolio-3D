@@ -110,7 +110,11 @@ void main()	{
   //  float d = tan(fov*DEG_TO_RAD / 2.0);
 
   float uvfov = tan(fov / 2.0 * DEG_TO_RAD);
-  vec2 uv = square_frame(resolution); 
+  vec2 uv = square_frame(resolution);
+
+  // Off-center projection: shift black hole to 3/4 horizontal position.
+  // uv.x is in [-1, +1]; subtracting 0.5 moves the "center" (black hole) to x=0.5 (75% from left).
+  uv.x -= 0.5;
 
   uv *= vec2(resolution.x/resolution.y, 1.0);
   vec3 forward = normalize(cam_dir); // 
