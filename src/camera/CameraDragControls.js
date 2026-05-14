@@ -15,6 +15,12 @@ function isHTMLElement(domElement) {
  * Horizontal drag changes azimuth (theta), vertical drag changes elevation.
  * Direction is always computed as normalize(-position) via observer.applyOrbitPosition(),
  * so there is zero gimbal/roll regardless of orbit angle.
+ *
+ * Touch support:
+ *  - Single finger HORIZONTAL swipe → orbit (same as mouse drag, always active on mobile)
+ *  - Single finger VERTICAL swipe   → falls through to browser scroll → triggers zoom
+ *  - Two finger PINCH               → drives window.scrollBy() for zoom
+ *
  * @member {HTMLElement} domElement
  */
 export class CameraDragControls {
@@ -31,11 +37,21 @@ export class CameraDragControls {
     this.enabled = true;
 
     this.lookSpeed = 0.005;
+    this.pinchScrollSpeed = 2.5; // how aggressively pinch maps to scroll
 
+    // Mouse state
     this.offsetX = 0
     this.offsetY = 0
     this.lastX = 0
     this.lastY = 0
+    this.mouseDragOn = false
+
+    // Touch state
+    this.touchDragOn = false
+    this.touchAxisLocked = null  // 'horizontal' | 'vertical' | null (determined on first move)
+    this.lastTouchX = 0
+    this.lastTouchY = 0
+    this.pinchStartDist = 0
 
     this.viewHalfX = 0
     this.viewHalfY = 0
@@ -45,6 +61,7 @@ export class CameraDragControls {
     }
 
     this.addMouseEventHandlers();
+    this.addTouchEventHandlers();
     this.handleResize();
   }
 
@@ -67,9 +84,9 @@ export class CameraDragControls {
 
       // Vertical drag → elevation angle (clamp to avoid poles)
       this.observer.elevationAngle = Math.max(
-        2 * Math.PI / 180,   // min 2° — stay just above disk plane
+        2 * Math.PI / 180,
         Math.min(
-          80 * Math.PI / 180, // max 80° — avoid top-down singularity
+          80 * Math.PI / 180,
           this.observer.elevationAngle - this.lookSpeed * this.offsetY
         )
       )
@@ -78,11 +95,18 @@ export class CameraDragControls {
       this.offsetY /= 2;
     }
 
+    // Touch horizontal drag → always active on mobile (no GUI toggle needed)
+    if (this.touchDragOn && this.touchAxisLocked === 'horizontal') {
+      this.observer.theta -= this.lookSpeed * this.offsetX
+      this.offsetX /= 2;
+    }
+
     // Recompute position + direction with latest theta + elevation
-    // (auto-orbit already advanced theta in observer.update(); drag adds on top)
     this.observer.applyOrbitPosition()
   }
 
+
+  // ─── Mouse handlers ──────────────────────────────────────────────────────
 
   addMouseEventHandlers() {
     this.domElement.addEventListener('contextmenu', (event) => {
@@ -131,6 +155,71 @@ export class CameraDragControls {
       this.offsetX = 0;
       this.offsetY = 0;
     });
+  }
+
+
+  // ─── Touch handlers ───────────────────────────────────────────────────────
+
+  addTouchEventHandlers() {
+    this.domElement.addEventListener('touchstart', (event) => {
+      if (event.touches.length === 1) {
+        // Single finger — record start, axis not yet determined
+        this.touchDragOn = true;
+        this.touchAxisLocked = null;
+        this.lastTouchX = event.touches[0].clientX;
+        this.lastTouchY = event.touches[0].clientY;
+        this.offsetX = 0;
+      } else if (event.touches.length === 2) {
+        // Two fingers — pinch start
+        this.touchDragOn = false;
+        this.pinchStartDist = this._pinchDist(event.touches);
+      }
+    }, { passive: true });
+
+    this.domElement.addEventListener('touchmove', (event) => {
+      if (event.touches.length === 2) {
+        // ── Pinch → zoom via scrollBy ──────────────────────────────────────
+        const dist = this._pinchDist(event.touches);
+        const delta = this.pinchStartDist - dist; // positive = fingers closing = zoom in
+        window.scrollBy(0, delta * this.pinchScrollSpeed);
+        this.pinchStartDist = dist;
+        return; // don't process as drag
+      }
+
+      if (!this.touchDragOn || event.touches.length !== 1) return;
+
+      const touch = event.touches[0];
+      const dx = touch.clientX - this.lastTouchX;
+      const dy = touch.clientY - this.lastTouchY;
+
+      // Determine axis on first meaningful movement
+      if (this.touchAxisLocked === null && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+        this.touchAxisLocked = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
+      }
+
+      if (this.touchAxisLocked === 'horizontal') {
+        // Intercept horizontal swipe → orbit
+        event.preventDefault();
+        this.offsetX = dx;
+      }
+      // Vertical → do nothing, browser scrolls the page → zoom via scroll formula
+
+      this.lastTouchX = touch.clientX;
+      this.lastTouchY = touch.clientY;
+    }, { passive: false }); // passive:false needed to allow preventDefault on horizontal
+
+    this.domElement.addEventListener('touchend', () => {
+      this.touchDragOn = false;
+      this.touchAxisLocked = null;
+      this.offsetX = 0;
+    }, { passive: true });
+  }
+
+  /** Returns distance between two touch points */
+  _pinchDist(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
   }
 
 }

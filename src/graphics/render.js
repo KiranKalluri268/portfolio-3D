@@ -56,6 +56,7 @@ export function createCamera(renderer) {
 export function loadTextures() {
   const textures = new Map();
   const textureLoader = new THREE.TextureLoader()
+  const pending = [];
 
   loadTexture('bg1', milkywayUrl, THREE.NearestFilter)
   loadTexture('star', starUrl, THREE.LinearFilter)
@@ -63,23 +64,31 @@ export function loadTextures() {
 
   window.onbeforeunload = () => {
     for (const texture of textures.values()) {
-      texture.dispose();
+      if (texture) texture.dispose();
     }
   }
 
-  return textures;
+  // resolves when all textures have loaded
+  const ready = Promise.all(pending);
+
+  return { textures, ready };
 
   function loadTexture(name, image, interpolation, wrap = THREE.ClampToEdgeWrapping) {
     textures.set(name, null);
-    textureLoader.load(image, (texture) => {
-      texture.magFilter = interpolation
-      texture.minFilter = interpolation
-      texture.wrapT = wrap
-      texture.wrapS = wrap
-      textures.set(name, texture);
-    })
+    const p = new Promise((resolve) => {
+      textureLoader.load(image, (texture) => {
+        texture.magFilter = interpolation
+        texture.minFilter = interpolation
+        texture.wrapT = wrap
+        texture.wrapS = wrap
+        textures.set(name, texture);
+        resolve();
+      })
+    });
+    pending.push(p);
   }
 }
+
 
 export async function createShaderProjectionPlane(uniforms) {
 

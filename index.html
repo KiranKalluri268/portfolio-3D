@@ -10,7 +10,13 @@
     <link rel="stylesheet" href="/style.css">
   </head>  
   <body>
-    
+
+    <!-- Loading overlay — dismissed by main.js once all textures are ready -->
+    <div id="loading-overlay">
+      <div class="loading-ring outer"></div>
+      <div class="loading-ring inner"></div>
+    </div>
+
     <script type="x-shader/x-vertex" id="vertexShader">  
 
       void main()	{

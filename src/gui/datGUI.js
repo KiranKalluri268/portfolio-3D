@@ -1,8 +1,8 @@
-import dat from "dat.gui";
+import GUI from "lil-gui";
 
 export function createConfigGUI(changePerformanceQuality, saveScreenshot) {
 
-  const gui = new dat.GUI()
+  const gui = new GUI()
   gui.hide();
 
   window.addEventListener('keydown', (event) => {

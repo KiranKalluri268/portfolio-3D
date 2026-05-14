@@ -35,8 +35,8 @@ import { createConfigGUI } from './gui/datGUI';
   const { composer, bloomPass, scene } = createScene(renderer);
   document.body.appendChild(renderer.domElement)
 
-  // init graphics
-  const textures = loadTextures();
+  // init graphics — textures load async; ready resolves when all are done
+  const { textures, ready } = loadTextures();
   const { mesh, changePerformanceQuality } = await createShaderProjectionPlane(uniforms);
   // add shader plane to scene
   scene.add(mesh);
@@ -53,8 +53,26 @@ import { createConfigGUI } from './gui/datGUI';
 
   const DEFAULT_ELEVATION = 5 * Math.PI / 180 // 5° — default camera elevation above disk
 
-  // start loop
+  // Resize handler — only fires on actual window resize, not every frame
+  function handleResize() {
+    renderer.setPixelRatio(window.devicePixelRatio * performanceConfig.resolution)
+    renderer.setSize(window.innerWidth, window.innerHeight)
+    composer.setSize(window.innerWidth * performanceConfig.resolution, window.innerHeight * performanceConfig.resolution)
+  }
+  window.addEventListener('resize', handleResize)
+  handleResize()
+
+  // start render loop immediately (renders black until textures arrive)
   update();
+
+  // dismiss loading overlay once all textures are ready
+  ready.then(() => {
+    const overlay = document.getElementById('loading-overlay')
+    if (overlay) {
+      overlay.classList.add('loaded')
+      overlay.addEventListener('transitionend', () => overlay.remove(), { once: true })
+    }
+  });
 
 
   // UPDATING
@@ -70,10 +88,6 @@ import { createConfigGUI } from './gui/datGUI';
 
     // update peripherals
     stats.update()
-    // window size
-    renderer.setPixelRatio(window.devicePixelRatio * performanceConfig.resolution)
-    renderer.setSize(window.innerWidth, window.innerHeight)
-    composer.setSize(window.innerWidth * performanceConfig.resolution, window.innerHeight * performanceConfig.resolution)
 
     // update renderer
     observer.update(delta)

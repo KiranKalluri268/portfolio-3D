@@ -13,7 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "dat.gui": "^0.7.9",
+    "lil-gui": "^0.19.0",
     "stats.js": "^0.17.0",
     "three": "^0.148.0"
   },

@@ -10,3 +10,51 @@ canvas {
   width: 100%; 
   height: 100%;
 }
+
+/* ── Loading overlay ─────────────────────────────────────── */
+#loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: opacity 0.8s ease;
+}
+
+#loading-overlay.loaded {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+
+.loading-ring.outer {
+  width: 120px;
+  height: 120px;
+  border-top-color: #e8a048;
+  border-right-color: rgba(232, 160, 72, 0.3);
+  animation: spin-cw 2s linear infinite;
+  box-shadow: 0 0 18px rgba(232, 160, 72, 0.4);
+}
+
+.loading-ring.inner {
+  width: 70px;
+  height: 70px;
+  border-bottom-color: #fff5e0;
+  border-left-color: rgba(255, 245, 224, 0.2);
+  animation: spin-ccw 1.4s linear infinite, pulse 2s ease-in-out infinite;
+}
+
+@keyframes spin-cw  { to { transform: rotate(360deg);  } }
+@keyframes spin-ccw { to { transform: rotate(-360deg); } }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
