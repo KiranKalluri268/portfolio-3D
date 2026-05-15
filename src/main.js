@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { createCamera, createRenderer, createScene, createShaderProjectionPlane, loadTextures, createParticleSystem } from './graphics/render';
 import { createStatsGUI } from './gui/statsGUI';
 import { createConfigGUI } from './gui/datGUI';
+import Lenis from 'lenis';
 
 
 (async () => {
@@ -79,8 +80,15 @@ import { createConfigGUI } from './gui/datGUI';
   window.addEventListener('resize', handleResize)
   handleResize()
 
+  // Initialize Lenis for smooth scrolling
+  const lenis = new Lenis({
+    lerp: 0.1, // Smoothness
+    smoothWheel: true,
+  });
+
   // start render loop immediately (renders black until textures arrive)
-  update();
+  // requestAnimationFrame passes a high-res timestamp automatically
+  requestAnimationFrame(update);
 
   // dismiss loading overlay once all textures are ready
   ready.then(() => {
@@ -94,16 +102,35 @@ import { createConfigGUI } from './gui/datGUI';
 
   // UPDATING
 
-  function update() {
+  function update(timeNow) {
+    // Lenis needs the high-res timestamp
+    if (timeNow) lenis.raf(timeNow);
+
     delta = (Date.now() - lastframe) / 1000
     time += delta
 
     // scroll logic
-    const scrollHeight = document.body.scrollHeight - window.innerHeight;
-    const scrollFraction = Math.max(0, Math.min(1, window.scrollY / scrollHeight));
-    cameraConfig.distance = 18 - (14 * scrollFraction);
+    const scrollHeight = Math.max(1, document.body.scrollHeight - window.innerHeight);
+    const scrollFraction = Math.max(0, Math.min(1, lenis.scroll / scrollHeight));
 
-    const currentScrollY = window.scrollY;
+    // ── Cinematic Camera Trajectory ──
+    // 0.0 -> High Above (Dist: 25, Elev: 60°)
+    // 1.0 -> Edge-On Rings (Dist: 4, Elev: 5°)
+    const startDist = 25.0;
+    const endDist = 4.0;
+    const startElev = 60.0 * Math.PI / 180;
+    const endElev = 5.0 * Math.PI / 180;
+
+    // Use smoothstep for a softer ease-in/ease-out cinematic swoop
+    const ease = scrollFraction * scrollFraction * (3.0 - 2.0 * scrollFraction);
+    cameraConfig.distance = startDist + (endDist - startDist) * ease;
+    
+    // We only force elevation if drag is not active
+    if (!cameraConfig.enableDrag) {
+      observer.elevationAngle = startElev + (endElev - startElev) * ease;
+    }
+
+    const currentScrollY = lenis.scroll;
     const scrollDelta = currentScrollY - lastScrollY;
     lastScrollY = currentScrollY;
 
@@ -127,11 +154,6 @@ import { createConfigGUI } from './gui/datGUI';
     // update renderer
     observer.update(delta)
     cameraControl.update(delta)
-
-    // when drag is OFF, smoothly spring elevation back to default
-    if (!cameraConfig.enableDrag) {
-      observer.elevationAngle += (DEFAULT_ELEVATION - observer.elevationAngle) * 5 * delta
-    }
 
     // slowly revolve particles around the BH when toggle is on
     if (cameraConfig.particleOrbit) {
