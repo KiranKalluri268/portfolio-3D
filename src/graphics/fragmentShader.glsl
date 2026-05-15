@@ -150,13 +150,15 @@ void main()	{
   float h2 = dot(c,c);
 
   
-  // for doppler effect
-  float ray_gamma = 1.0/sqrt(1.0-dot(cam_vel,cam_vel));
+  // for doppler effect (using hardware inversesqrt)
+  float ray_gamma = inversesqrt(1.0 - dot(cam_vel, cam_vel));
   float ray_doppler_factor = ray_gamma * (1.0 + dot(ray_dir, -cam_vel));
     
   float ray_intensity = 1.0;
-  if (beaming)
-    ray_intensity /= pow(ray_doppler_factor , 3.0);
+  if (beaming) {
+    float rdf = ray_doppler_factor;
+    ray_intensity /= (rdf * rdf * rdf);
+  }
   
   
   vec3 oldpoint; 
@@ -167,13 +169,18 @@ void main()	{
   // Leapfrog geodesic
   for (int i=0; i<NSTEPS;i++){ 
     oldpoint = point; // remember previous point for finding intersection
+    
     point += velocity * STEP;
-    vec3 accel = -1.5 * h2 * point / pow(dot(point,point),2.5);
-    velocity += accel * STEP;    
     
     // distance from origin
     distance = length(point);
-    if ( distance < 0.0) break;
+    
+    // Optmization: Replace expensive pow() with fast multiplication
+    float distSq = distance * distance;
+    float dist5 = distSq * distSq * distance;
+    
+    vec3 accel = -1.5 * h2 * point / dist5;
+    velocity += accel * STEP;    
     
     bool horizon_mask = distance < 1.0 && length(oldpoint) > 1.0;// intersecting eventhorizon
     // does it enter event horizon?
@@ -193,10 +200,10 @@ void main()	{
         if (DISK_IN <= r&&r <= DISK_IN+DISK_WIDTH ){
           float phi = atan(intersection.x, intersection.z);
           
-          vec3 disk_velocity = vec3(-intersection.x, 0.0, intersection.z)/sqrt(2.0*(r-1.0))/(r*r); 
-          phi -= time;//length(r);
+          vec3 disk_velocity = vec3(-intersection.x, 0.0, intersection.z) * inversesqrt(2.0*(r-1.0)) / (r*r); 
+          phi -= time;
           phi = mod(phi , PI*2.0);
-          float disk_gamma = 1.0/sqrt(1.0-dot(disk_velocity, disk_velocity));
+          float disk_gamma = inversesqrt(1.0 - dot(disk_velocity, disk_velocity));
           float disk_doppler_factor = disk_gamma*(1.0+dot(ray_dir/distance, disk_velocity)); // from source 
           
           if (use_disk_texture){
@@ -205,8 +212,10 @@ void main()	{
             vec4 disk_color = texture2D(disk_texture, tex_coord) / (ray_doppler_factor * disk_doppler_factor);
             float disk_alpha = clamp(dot(disk_color,disk_color)/4.5,0.0,1.0);
 
-            if (beaming)
-              disk_alpha /= pow(disk_doppler_factor,3.0);
+            if (beaming) {
+              float ddf = disk_doppler_factor;
+              disk_alpha /= (ddf * ddf * ddf);
+            }
             
             color += vec4(disk_color)*disk_alpha;
           } else {
@@ -221,10 +230,11 @@ void main()	{
           vec3 disk_color = temp_to_color(disk_temperature);
           float disk_alpha = clamp(dot(disk_color,disk_color)/3.0,0.0,1.0);
           
-          if (beaming)
-            disk_alpha /= pow(disk_doppler_factor,3.0);
+          if (beaming) {
+            float ddf = disk_doppler_factor;
+            disk_alpha /= (ddf * ddf * ddf);
+          }
             
-          
           color += vec4(disk_color, 1.0)*disk_alpha;
           
           }
