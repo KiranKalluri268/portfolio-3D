@@ -38,8 +38,8 @@ export function createConfigGUI(changePerformanceQuality, saveScreenshot) {
   function addBloomConfig() {
     const bloomConfig = {
       strength: 1,
-      radius: 0.5,
-      threshold: 0.55
+      radius: 0.4,
+      threshold: 0.6
     };
 
     const bloomFolder = gui.addFolder('Bloom')

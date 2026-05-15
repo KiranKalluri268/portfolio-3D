@@ -117,7 +117,7 @@ import Lenis from 'lenis';
     // 0.0 -> High Above (Dist: 25, Elev: 60°)
     // 1.0 -> Edge-On Rings (Dist: 4, Elev: 5°)
     const startDist = 25.0;
-    const endDist = 4.0;
+    const endDist = 5.1;
     const startElev = 60.0 * Math.PI / 180;
     const endElev = 5.0 * Math.PI / 180;
 
