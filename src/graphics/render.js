@@ -145,3 +145,102 @@ export async function createShaderProjectionPlane(uniforms) {
     changePerformanceQuality
   };
 }
+
+export function createParticleSystem() {
+  const targetLensed = new THREE.WebGLRenderTarget(
+    window.innerWidth, window.innerHeight,
+    { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat }
+  );
+  const targetUnlensed = new THREE.WebGLRenderTarget(
+    window.innerWidth, window.innerHeight,
+    { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat }
+  );
+
+  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100000);
+
+  const sceneLensed = new THREE.Scene();
+  const sceneUnlensed = new THREE.Scene();
+
+  // 2500 points in a flattened shell (r = 8..42) around the BH
+  const COUNT = 2500;
+  const pos = new Float32Array(COUNT * 3);
+  for (let i = 0; i < COUNT; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi   = Math.acos(2 * Math.random() - 1);
+    const r     = 8 + Math.random() * 34;
+    pos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+    pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.25; // flatten to galactic plane
+    pos[i * 3 + 2] = r * Math.cos(phi);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+
+  // ── Shared circular sprite — tight core, fast falloff (no large shadow halo)
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0,    'rgba(255,255,255,1)');
+  grad.addColorStop(0.12, 'rgba(255,255,255,0.95)');
+  grad.addColorStop(0.30, 'rgba(255,255,255,0.4)');
+  grad.addColorStop(0.55, 'rgba(255,255,255,0.05)');
+  grad.addColorStop(1,    'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 64, 64);
+  const pointTex = new THREE.CanvasTexture(canvas);
+
+  const matBase = {
+    map: pointTex,
+    color: 0xffffff,
+    sizeAttenuation: true,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+    alphaTest: 0.005,
+  };
+
+  // Layer 1: many small crisp stars (bulk of the field)
+  const COUNT_S = 2200;
+  const posS = new Float32Array(COUNT_S * 3);
+  for (let i = 0; i < COUNT_S; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi   = Math.acos(2 * Math.random() - 1);
+    const r     = 8 + Math.random() * 34;
+    posS[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+    posS[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.25;
+    posS[i * 3 + 2] = r * Math.cos(phi);
+  }
+  const geoS = new THREE.BufferGeometry();
+  geoS.setAttribute('position', new THREE.BufferAttribute(posS, 3));
+  sceneLensed.add(new THREE.Points(geoS, new THREE.PointsMaterial({ ...matBase, size: 0.08 })));
+
+  // Layer 2: fewer brighter slightly-larger stars (foreground highlights)
+  const COUNT_B = 300;
+  const posB = new Float32Array(COUNT_B * 3);
+  for (let i = 0; i < COUNT_B; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi   = Math.acos(2 * Math.random() - 1);
+    const r     = 8 + Math.random() * 30;
+    posB[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+    posB[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.25;
+    posB[i * 3 + 2] = r * Math.cos(phi);
+  }
+  const geoB = new THREE.BufferGeometry();
+  geoB.setAttribute('position', new THREE.BufferAttribute(posB, 3));
+  sceneUnlensed.add(new THREE.Points(geoB, new THREE.PointsMaterial({ ...matBase, size: 0.11 })));
+
+  window.addEventListener('resize', () => {
+    targetLensed.setSize(window.innerWidth, window.innerHeight);
+    targetUnlensed.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+  });
+
+  return { 
+    particleSceneLensed: sceneLensed, 
+    particleTargetLensed: targetLensed,
+    particleSceneUnlensed: sceneUnlensed, 
+    particleTargetUnlensed: targetUnlensed,
+    particleCamera: camera 
+  };
+}

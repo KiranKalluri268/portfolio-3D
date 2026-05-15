@@ -46,11 +46,11 @@ export class Observer extends THREE.PerspectiveCamera {
       this.r * sinElev,          // constant positive Y — always above disk
       this.r * cosElev * cos
     )
-    // Tangential velocity stays in XZ plane
+    // Tangential velocity stays in XZ plane (negated because we reversed orbit direction)
     this.velocity.set(
-      cosElev * cos * this.angularVelocity,
+      -cosElev * cos * this.angularVelocity,
       0,
-      -cosElev * sin * this.angularVelocity
+      cosElev * sin * this.angularVelocity
     )
     // Look-at: always point toward origin — no Euler gimbal, no roll
     this.direction.copy(this.position).negate().normalize()
@@ -64,8 +64,8 @@ export class Observer extends THREE.PerspectiveCamera {
       this.delta = delta
     }
 
-    // advance orbit angle
-    this.theta += this.angularVelocity * this.delta
+    // advance orbit angle (reversed direction)
+    this.theta -= this.angularVelocity * this.delta
 
     if (this.moving) {
       // accel

@@ -1,6 +1,6 @@
 /* globals THREE dat Stats Observer*/
 import * as THREE from 'three';
-import { createCamera, createRenderer, createScene, createShaderProjectionPlane, loadTextures } from './graphics/render';
+import { createCamera, createRenderer, createScene, createShaderProjectionPlane, loadTextures, createParticleSystem } from './graphics/render';
 import { createStatsGUI } from './gui/statsGUI';
 import { createConfigGUI } from './gui/datGUI';
 
@@ -10,6 +10,10 @@ import { createConfigGUI } from './gui/datGUI';
   let lastframe = Date.now()
   let delta = 0
   let time = 0
+  let lastScrollY = window.scrollY
+  let orbitDirection = 1;         // 1 for forward, -1 for backward
+  let currentOrbitSpeed = 0.05;   // current smoothly interpolated speed
+  const BASE_ORBIT_SPEED = 0.05;  // constant idle spin
 
   // set variables types for shader
   const uniforms = {
@@ -27,7 +31,10 @@ import { createConfigGUI } from './gui/datGUI';
     fov: { type: "f", value: 0.0 },
     bg_texture: { type: "t", value: null },
     star_texture: { type: "t", value: null },
-    disk_texture: { type: "t", value: null }
+    disk_texture: { type: "t", value: null },
+    particle_texture: { type: "t", value: null },
+    particle_texture_unlensed: { type: "t", value: null },
+    show_lensing: { type: "b", value: true }
   }
 
   // create scene, 3d context, etc.. instances
@@ -43,8 +50,18 @@ import { createConfigGUI } from './gui/datGUI';
 
   // setup camera
   const { observer, cameraControl } = createCamera(renderer);
-  // add camera object to scene
   scene.add(observer)
+
+  // particle system — 3D stars rendered to offscreen target, lensed in shader
+  const { 
+    particleSceneLensed, 
+    particleTargetLensed,
+    particleSceneUnlensed, 
+    particleTargetUnlensed,
+    particleCamera 
+  } = createParticleSystem();
+  uniforms.particle_texture.value = particleTargetLensed.texture;
+  uniforms.particle_texture_unlensed.value = particleTargetUnlensed.texture;
 
   // GUI
   const { cameraConfig, effectConfig, performanceConfig, bloomConfig } = createConfigGUI(changePerformanceQuality, saveToScreenshot);
@@ -86,6 +103,24 @@ import { createConfigGUI } from './gui/datGUI';
     const scrollFraction = Math.max(0, Math.min(1, window.scrollY / scrollHeight));
     cameraConfig.distance = 18 - (14 * scrollFraction);
 
+    const currentScrollY = window.scrollY;
+    const scrollDelta = currentScrollY - lastScrollY;
+    lastScrollY = currentScrollY;
+
+    // 1. Set continuous direction based on last scroll
+    if (scrollDelta > 0) orbitDirection = 1;
+    else if (scrollDelta < 0) orbitDirection = -1;
+
+    // 2. Calculate target speed (base speed + scroll momentum)
+    const extraSpeed = Math.abs(scrollDelta) * 0.1; 
+    const targetOrbitSpeed = (BASE_ORBIT_SPEED + extraSpeed) * orbitDirection;
+
+    // 3. Smoothly accelerate/decelerate towards target speed
+    currentOrbitSpeed += (targetOrbitSpeed - currentOrbitSpeed) * 5 * delta;
+
+    // 4. Apply continuous momentum to camera
+    observer.theta -= currentOrbitSpeed * delta;
+
     // update peripherals
     stats.update()
 
@@ -96,6 +131,12 @@ import { createConfigGUI } from './gui/datGUI';
     // when drag is OFF, smoothly spring elevation back to default
     if (!cameraConfig.enableDrag) {
       observer.elevationAngle += (DEFAULT_ELEVATION - observer.elevationAngle) * 5 * delta
+    }
+
+    // slowly revolve particles around the BH when toggle is on
+    if (cameraConfig.particleOrbit) {
+      particleSceneLensed.rotation.y += delta * 0.01  // ~1 full revolution per ~2.5 min
+      particleSceneUnlensed.rotation.y -= delta * 0.01 // rotate in opposite direction
     }
 
     // update shader variables
@@ -110,6 +151,19 @@ import { createConfigGUI } from './gui/datGUI';
   }
 
   function render() {
+    // 1. Render lensed 3D particles to off-screen target
+    renderer.setRenderTarget(particleTargetLensed)
+    renderer.clear()
+    renderer.render(particleSceneLensed, particleCamera)
+
+    // 2. Render unlensed 3D particles to off-screen target
+    renderer.setRenderTarget(particleTargetUnlensed)
+    renderer.clear()
+    renderer.render(particleSceneUnlensed, particleCamera)
+    
+    renderer.setRenderTarget(null)
+
+    // 3. Main ray-marching + bloom
     composer.render()
   }
 
@@ -129,6 +183,15 @@ import { createConfigGUI } from './gui/datGUI';
     uniforms.star_texture.value = textures.get('star')
     uniforms.disk_texture.value = textures.get('disk')
 
+    // sync particle camera to observer so 3D positions are correct
+    particleCamera.fov = observer.fov
+    particleCamera.aspect = window.innerWidth / window.innerHeight
+    particleCamera.updateProjectionMatrix()
+    particleCamera.position.copy(observer.position)
+    particleCamera.up.copy(observer.up)
+    particleCamera.lookAt(0, 0, 0)
+    particleCamera.updateMatrixWorld()
+
 
     bloomPass.strength = bloomConfig.strength
     bloomPass.radius = bloomConfig.radius
@@ -144,6 +207,7 @@ import { createConfigGUI } from './gui/datGUI';
     uniforms.use_disk_texture.value = effectConfig.use_disk_texture
     uniforms.doppler_shift.value = effectConfig.doppler_shift
     uniforms.beaming.value = effectConfig.beaming
+    uniforms.show_lensing.value = effectConfig.show_lensing
   }
 
   // https://r105.threejsfundamentals.org/threejs/lessons/threejs-tips.html

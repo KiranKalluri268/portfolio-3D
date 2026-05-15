@@ -30,6 +30,11 @@ uniform bool beaming;
 uniform sampler2D bg_texture;
 uniform sampler2D star_texture;
 uniform sampler2D disk_texture;
+uniform sampler2D particle_texture; // Lensed stars (small)
+uniform sampler2D particle_texture_unlensed; // Unlensed stars (large foreground)
+uniform bool show_lensing;
+
+
 
 vec2 square_frame(vec2 screen_size){
   vec2 position = 2.0 * (gl_FragCoord.xy / screen_size.xy) - 1.0; 
@@ -100,6 +105,7 @@ vec3 temp_to_color(float temp_kelvin){
   return color;
 }
 
+
 // https://gist.github.com/fieldOfView/5106319
 // https://gamedev.stackexchange.com/questions/93032/what-causes-this-distortion-in-my-perspective-projection-at-steep-view-angles
 // for reference
@@ -125,11 +131,10 @@ void main()	{
   vec3 pixel_pos =cam_pos + forward +
                  nright*uv.x*uvfov+ up*uv.y*uvfov;
   
-  vec3 ray_dir = normalize(pixel_pos - cam_pos); // 
-  
-  
+  vec3 ray_dir = normalize(pixel_pos - cam_pos);
+  vec3 orig_ray_dir = ray_dir; // saved before geodesic — used when show_lensing is off
 
-  // light aberration alters ray path 
+  // light aberration alters ray path
   if (lorentz_transform)
     ray_dir = lorentz_transform_velocity(ray_dir, cam_vel);
 
@@ -230,26 +235,58 @@ void main()	{
   }
   
   if (distance > 1.0){
-    ray_dir = normalize(point - oldpoint);
-    vec2 tex_coord = to_spherical(ray_dir * ROT_Z(45.0 * DEG_TO_RAD));
-    // taken from source
-    // red = temp
-    // green = lum
-    // blue = vel 
+
+    // ── Background: ALWAYS straight ray, never affected by lensing toggle ──
+    vec2 tex_coord = to_spherical(orig_ray_dir * ROT_Z(45.0 * DEG_TO_RAD));
+
     vec4 star_color = texture2D(star_texture, tex_coord);
     if (star_color.g > 0.0){
       float star_temperature = (MIN_TEMPERATURE + TEMPERATURE_RANGE*star_color.r);
-      // arbitrarily sets background stars' velocity for random shifts
       float star_velocity = star_color.b - 0.5;
       float star_doppler_factor = sqrt((1.0+star_velocity)/(1.0-star_velocity));
       if (doppler_shift)
         star_temperature /= ray_doppler_factor*star_doppler_factor;
-      
-      color += vec4(temp_to_color(star_temperature),1.0)* star_color.g;
+      color += vec4(temp_to_color(star_temperature), 1.0) * star_color.g;
     }
 
-    color += texture2D(bg_texture, tex_coord) * 0.25;
-// gl_FragColor = color;
+    float nebula_elev = abs(orig_ray_dir.y);
+    vec3 base_space = mix(
+      vec3(0.01, 0.013, 0.03),
+      vec3(0.0,  0.0,   0.006),
+      smoothstep(0.0, 0.55, nebula_elev)
+    );
+    color += vec4(base_space, 1.0);
+    color += texture2D(bg_texture, tex_coord) * 0.2;
+
+    // ── Screen-space lensed particles (Option B) ──────────────────────────
+    // Project the bent ray direction onto the camera frustum to get screen UV,
+    // then sample the off-screen particle framebuffer at that position.
+    // show_lensing ON  → use lensed direction → particles arc around BH
+    // show_lensing OFF → use straight direction → particles at true 3D positions
+    vec3 sample_dir = show_lensing ? normalize(point - oldpoint) : orig_ray_dir;
+    float fwd_dot = dot(sample_dir, forward);
+    if (fwd_dot > 0.0) {
+      float aspect = resolution.x / resolution.y;
+      float px = dot(sample_dir, nright) / (fwd_dot * uvfov);
+      float py = dot(sample_dir, up)    / (fwd_dot * uvfov);
+      // Lensed particles (small stars)
+      vec2 p_uv = vec2(px / aspect * 0.5 + 0.5, py * 0.5 + 0.5);
+      if (p_uv.x > 0.0 && p_uv.x < 1.0 && p_uv.y > 0.0 && p_uv.y < 1.0) {
+        color += texture2D(particle_texture, p_uv);
+      }
+    }
+    
+    // Unlensed particles (bright foreground stars) - always use orig_ray_dir
+    float orig_fwd_dot = dot(orig_ray_dir, forward);
+    if (orig_fwd_dot > 0.0) {
+      float aspect = resolution.x / resolution.y;
+      float orig_px = dot(orig_ray_dir, nright) / (orig_fwd_dot * uvfov);
+      float orig_py = dot(orig_ray_dir, up)    / (orig_fwd_dot * uvfov);
+      vec2 p_uv_unlensed = vec2(orig_px / aspect * 0.5 + 0.5, orig_py * 0.5 + 0.5);
+      if (p_uv_unlensed.x > 0.0 && p_uv_unlensed.x < 1.0 && p_uv_unlensed.y > 0.0 && p_uv_unlensed.y < 1.0) {
+        color += texture2D(particle_texture_unlensed, p_uv_unlensed);
+      }
+    }
   }
   gl_FragColor = color*ray_intensity;
 }

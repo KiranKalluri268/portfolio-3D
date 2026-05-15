@@ -55,13 +55,14 @@ export function createConfigGUI(changePerformanceQuality, saveScreenshot) {
       distance: 25,
       orbit: true,
       fov: 90.0,
-      enableDrag: false  // off by default — visitors scroll only, no mouse orbit
+      enableDrag: false,    // off by default — visitors scroll only
+      particleOrbit: false  // when on, particles slowly revolve around the BH
     }
     const observerFolder = gui.addFolder('Observer')
-    // observerFolder.add(cameraConfig, 'distance', 3, 25)
     observerFolder.add(cameraConfig, 'fov', 30, 90)
     observerFolder.add(cameraConfig, 'orbit')
     observerFolder.add(cameraConfig, 'enableDrag').name('Mouse Drag')
+    observerFolder.add(cameraConfig, 'particleOrbit').name('Particle Orbit')
     observerFolder.open()
     return cameraConfig
   }
@@ -72,7 +73,8 @@ export function createConfigGUI(changePerformanceQuality, saveScreenshot) {
       accretion_disk: true,
       use_disk_texture: true,
       doppler_shift: true,
-      beaming: true
+      beaming: true,
+      show_lensing: true  // toggle background distortion arcs from gravitational lensing
     }
     let effectFolder = gui.addFolder('Effects')
     effectFolder.add(effectConfig, 'lorentz_transform')
@@ -80,6 +82,7 @@ export function createConfigGUI(changePerformanceQuality, saveScreenshot) {
     effectFolder.add(effectConfig, 'beaming')
     effectFolder.add(effectConfig, 'accretion_disk')
     effectFolder.add(effectConfig, 'use_disk_texture')
+    effectFolder.add(effectConfig, 'show_lensing').name('Lensing Arcs')
     effectFolder.open()
     return effectConfig;
   }
