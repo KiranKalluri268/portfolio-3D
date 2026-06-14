@@ -1,6 +1,6 @@
 import GUI from "lil-gui";
 
-export function createConfigGUI(changePerformanceQuality, saveScreenshot) {
+export function createConfigGUI(changePerformanceQuality, changePerformancePreset, saveScreenshot) {
 
   const gui = new GUI()
   gui.hide();
@@ -24,12 +24,15 @@ export function createConfigGUI(changePerformanceQuality, saveScreenshot) {
 
   function addPerformanceConfig() {
     const performanceConfig = {
-      resolution: 0.9,
-      quality: 'low'
+      resolution: 1.0,
+      quality: 'high',
+      preset: 'high',
+      particleScale: 1.0
     }
     const perfFolder = gui.addFolder('Performance');
-    perfFolder.add(performanceConfig, 'resolution', [0.25, 0.5, 0.75, 0.9, 1.0, 2.0, 4.0]);
-    perfFolder.add(performanceConfig, 'quality', ['low', 'medium', 'high']).onChange(changePerformanceQuality);
+    perfFolder.add(performanceConfig, 'resolution', [0.25, 0.5, 0.75, 0.9, 1.0, 2.0, 4.0]).listen();
+    perfFolder.add(performanceConfig, 'quality', ['low', 'medium', 'high']).onChange(changePerformanceQuality).listen();
+    perfFolder.add(performanceConfig, 'preset', ['low', 'medium', 'high']).onChange(changePerformancePreset).listen();
     perfFolder.open();
 
     return performanceConfig;

@@ -3,18 +3,47 @@ import * as THREE from 'three';
 import { createCamera, createRenderer, createScene, createShaderProjectionPlane, loadTextures, createParticleSystem } from './graphics/render';
 import { createStatsGUI } from './gui/statsGUI';
 import { createConfigGUI } from './gui/datGUI';
+import { ThreeDQualityManager } from './performance/ThreeDQualityManager';
 import Lenis from 'lenis';
 
 
 (async () => {
 
-  let lastframe = Date.now()
+  let lastframe = performance.now()
   let delta = 0
   let time = 0
   let lastScrollY = window.scrollY
   let orbitDirection = 1;         // 1 for forward, -1 for backward
   let currentOrbitSpeed = 0.05;   // current smoothly interpolated speed
   const BASE_ORBIT_SPEED = 0.05;  // constant idle spin
+  const PERFORMANCE_PRESETS = {
+    low: {
+      resolution: 0.5,
+      quality: 'low',
+      bloomStrength: 1,
+      bloomRadius: 0.4,
+      particleScale: 1.0,
+    },
+    medium: {
+      resolution: 0.75,
+      quality: 'medium',
+      bloomStrength: 1,
+      bloomRadius: 0.4,
+      particleScale: 1.0,
+    },
+    high: {
+      resolution: 1.0,
+      quality: 'high',
+      bloomStrength: 1,
+      bloomRadius: 0.4,
+      particleScale: 1.0,
+    },
+  };
+
+  // ── FPS Tracking & Auto-Detect State ──
+  let texturesLoaded = false;
+  let initialQualityBenchmarkComplete = false;
+  let loadingOverlayDismissed = false;
 
   // set variables types for shader
   const uniforms = {
@@ -59,26 +88,106 @@ import Lenis from 'lenis';
     particleTargetLensed,
     particleSceneUnlensed, 
     particleTargetUnlensed,
-    particleCamera 
+    particleCamera,
+    resizeParticleTargets
   } = createParticleSystem();
   uniforms.particle_texture.value = particleTargetLensed.texture;
   uniforms.particle_texture_unlensed.value = particleTargetUnlensed.texture;
 
   // GUI
-  const { cameraConfig, effectConfig, performanceConfig, bloomConfig } = createConfigGUI(changePerformanceQuality, saveToScreenshot);
+  let cameraConfig, effectConfig, performanceConfig, bloomConfig;
+  let qualityManager;
+  ({ cameraConfig, effectConfig, performanceConfig, bloomConfig } = createConfigGUI(
+    changePerformanceQuality,
+    applyPerformancePreset,
+    saveToScreenshot
+  ));
   const stats = createStatsGUI();
   document.body.appendChild(stats.dom);
 
   const DEFAULT_ELEVATION = 5 * Math.PI / 180 // 5° — default camera elevation above disk
 
   // Resize handler — only fires on actual window resize, not every frame
-  function handleResize() {
-    renderer.setPixelRatio(window.devicePixelRatio * performanceConfig.resolution)
+  function applyRenderScale(resolution = performanceConfig.resolution) {
+    performanceConfig.resolution = resolution
+    renderer.setPixelRatio(window.devicePixelRatio * resolution)
     renderer.setSize(window.innerWidth, window.innerHeight)
-    composer.setSize(window.innerWidth * performanceConfig.resolution, window.innerHeight * performanceConfig.resolution)
+    composer.setSize(window.innerWidth * resolution, window.innerHeight * resolution)
+    resizeParticleTargets(window.innerWidth * resolution, window.innerHeight * resolution)
+    uniforms.resolution.value.set(window.innerWidth * resolution, window.innerHeight * resolution)
+  }
+
+  function setPerformanceQuality(quality) {
+    performanceConfig.quality = quality
+    changePerformanceQuality(quality)
+  }
+
+  function applyPerformancePreset(presetName, syncQualityManager = true) {
+    const preset = PERFORMANCE_PRESETS[presetName] ?? PERFORMANCE_PRESETS.high
+
+    performanceConfig.preset = presetName
+    performanceConfig.particleScale = preset.particleScale
+    bloomConfig.strength = preset.bloomStrength
+    bloomConfig.radius = preset.bloomRadius
+    setPerformanceQuality(preset.quality)
+    applyRenderScale(preset.resolution)
+
+    if (syncQualityManager && qualityManager) {
+      qualityManager.setTier(presetName)
+    }
+  }
+
+  function handleResize() {
+    applyRenderScale()
   }
   window.addEventListener('resize', handleResize)
+
+  qualityManager = new ThreeDQualityManager({
+    tiers: ['low', 'medium', 'high'],
+    initialTier: 'medium',
+    warmupMs: 3000,
+    healthyFrameMs: 18,
+    heavyFrameMs: 20,
+    panicFrameMs: 50,
+    heavyFrameLimit: 5,
+    cooldownMs: 7000,
+    upgradeStableMs: 8000,
+    mediumHeavyFrameLimit: 20,
+    lowToMediumProbeMs: 8000,
+    mediumProbeEvaluationMs: 6000,
+    failedProbeCooldownMs: 20000,
+    allowHighAutoUpgrade: false,
+    onQualityDowngrade: (newTier, { reason }) => {
+      console.log("Quality Manager: Downgraded to " + newTier + " (" + reason + ")");
+      applyPerformancePreset(newTier, false);
+    },
+    onQualityUpgrade: (newTier, { reason }) => {
+      console.log("Quality Manager: Upgraded to " + newTier + " (" + reason + ")");
+      applyPerformancePreset(newTier, false);
+    },
+    onWarmupComplete: ({ tier, heavyFrames, panicFrames }) => {
+      console.log(
+        "Quality Manager: Warmup complete at " + tier +
+        " (" + heavyFrames + " heavy frames, " + panicFrames + " panic frames)"
+      );
+      initialQualityBenchmarkComplete = true;
+      dismissLoadingOverlayIfReady();
+    },
+  });
+
+  applyPerformancePreset('medium', false);
   handleResize()
+
+  ready
+    .then(() => {
+      texturesLoaded = true;
+      dismissLoadingOverlayIfReady();
+    })
+    .catch((error) => {
+      texturesLoaded = true;
+      console.error('One or more textures failed to load.', error);
+      dismissLoadingOverlayIfReady();
+    });
 
   // Initialize Lenis for smooth scrolling
   const lenis = new Lenis({
@@ -90,14 +199,7 @@ import Lenis from 'lenis';
   // requestAnimationFrame passes a high-res timestamp automatically
   requestAnimationFrame(update);
 
-  // dismiss loading overlay once all textures are ready
-  ready.then(() => {
-    const overlay = document.getElementById('loading-overlay')
-    if (overlay) {
-      overlay.classList.add('loaded')
-      overlay.addEventListener('transitionend', () => overlay.remove(), { once: true })
-    }
-  });
+  // loading overlay will be dismissed by the auto-detect phase inside update()
 
 
   // UPDATING
@@ -106,12 +208,16 @@ import Lenis from 'lenis';
     // Lenis needs the high-res timestamp
     if (timeNow) lenis.raf(timeNow);
 
-    delta = (Date.now() - lastframe) / 1000
+    const frameTimestamp = timeNow ?? performance.now()
+    delta = (frameTimestamp - lastframe) / 1000
     time += delta
 
     // scroll logic
     const scrollHeight = Math.max(1, document.body.scrollHeight - window.innerHeight);
     const scrollFraction = Math.max(0, Math.min(1, lenis.scroll / scrollHeight));
+    qualityManager.update(frameTimestamp);
+
+    // ── FPS Tracking & Dynamic Scaling ──
 
     // ── Cinematic Camera Trajectory ──
     // 0.0 -> High Above (Dist: 25, Elev: 60°)
@@ -169,7 +275,7 @@ import Lenis from 'lenis';
 
     // loop
     requestAnimationFrame(update)
-    lastframe = Date.now()
+    lastframe = frameTimestamp
   }
 
   function render() {
@@ -191,8 +297,6 @@ import Lenis from 'lenis';
 
   function updateUniforms() {
     uniforms.time.value = time
-    uniforms.resolution.value.x = window.innerWidth * performanceConfig.resolution
-    uniforms.resolution.value.y = window.innerHeight * performanceConfig.resolution
 
     uniforms.cam_pos.value = observer.position
     uniforms.cam_dir.value = observer.direction
@@ -230,6 +334,17 @@ import Lenis from 'lenis';
     uniforms.doppler_shift.value = effectConfig.doppler_shift
     uniforms.beaming.value = effectConfig.beaming
     uniforms.show_lensing.value = effectConfig.show_lensing
+  }
+
+  function dismissLoadingOverlayIfReady() {
+    if (loadingOverlayDismissed || !texturesLoaded || !initialQualityBenchmarkComplete) return;
+
+    loadingOverlayDismissed = true;
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+      overlay.classList.add('loaded');
+      overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
+    }
   }
 
   // https://r105.threejsfundamentals.org/threejs/lessons/threejs-tips.html

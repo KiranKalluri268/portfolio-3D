@@ -75,7 +75,7 @@ export function loadTextures() {
 
   function loadTexture(name, image, interpolation, wrap = THREE.ClampToEdgeWrapping) {
     textures.set(name, null);
-    const p = new Promise((resolve) => {
+    const p = new Promise((resolve, reject) => {
       textureLoader.load(image, (texture) => {
         texture.magFilter = interpolation
         texture.minFilter = interpolation
@@ -83,7 +83,10 @@ export function loadTextures() {
         texture.wrapS = wrap
         textures.set(name, texture);
         resolve();
-      })
+      }, undefined, (error) => {
+        console.error(`Failed to load texture "${name}"`, error);
+        reject(error);
+      });
     });
     pending.push(p);
   }
@@ -97,7 +100,7 @@ export async function createShaderProjectionPlane(uniforms) {
     throw new Error('Error reading vertex shader!');
   }
 
-  const defines = getShaderDefineConstant('medium');
+  const defines = getShaderDefineConstant('high');
   const material = new THREE.ShaderMaterial({
     uniforms: uniforms,
     vertexShader,
@@ -119,20 +122,20 @@ export async function createShaderProjectionPlane(uniforms) {
     let STEP, NSTEPS;
     switch (quality) {
       case 'low':
-        STEP = 0.1;
-        NSTEPS = 300;
+        STEP = 0.15;
+        NSTEPS = 350;
         break;
       case 'medium':
-        STEP = 0.05;
-        NSTEPS = 600;
+        STEP = 0.08;
+        NSTEPS = 650;
         break;
       case 'high':
-        STEP = 0.02;
-        NSTEPS = 1000;
+        STEP = 0.04;
+        NSTEPS = 1300;
         break;
       default:
-        STEP = 0.05;
-        NSTEPS = 600;
+        STEP = 0.04;
+        NSTEPS = 1300;
     }
     return `
   #define STEP ${STEP} 
@@ -229,18 +232,19 @@ export function createParticleSystem() {
   geoB.setAttribute('position', new THREE.BufferAttribute(posB, 3));
   sceneUnlensed.add(new THREE.Points(geoB, new THREE.PointsMaterial({ ...matBase, size: 0.11 })));
 
-  window.addEventListener('resize', () => {
-    targetLensed.setSize(window.innerWidth, window.innerHeight);
-    targetUnlensed.setSize(window.innerWidth, window.innerHeight);
-    camera.aspect = window.innerWidth / window.innerHeight;
+  function resize(width, height) {
+    targetLensed.setSize(width, height);
+    targetUnlensed.setSize(width, height);
+    camera.aspect = width / height;
     camera.updateProjectionMatrix();
-  });
+  }
 
   return { 
     particleSceneLensed: sceneLensed, 
     particleTargetLensed: targetLensed,
     particleSceneUnlensed: sceneUnlensed, 
     particleTargetUnlensed: targetUnlensed,
-    particleCamera: camera 
+    particleCamera: camera,
+    resizeParticleTargets: resize
   };
 }
