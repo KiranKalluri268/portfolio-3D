@@ -96,6 +96,11 @@ import Lenis from 'lenis';
   } = createParticleSystem();
   uniforms.particle_texture.value = particleTargetLensed.texture;
   uniforms.particle_texture_unlensed.value = particleTargetUnlensed.texture;
+  ready.then(() => {
+    uniforms.bg_texture.value = textures.get('bg1')
+    uniforms.star_texture.value = textures.get('star')
+    uniforms.disk_texture.value = textures.get('disk')
+  });
 
   // GUI
   let cameraConfig, effectConfig, performanceConfig, bloomConfig;
@@ -114,6 +119,11 @@ import Lenis from 'lenis';
   let renderWidth = 0
   let renderHeight = 0
   let renderPixelRatio = 0
+  let particleCameraFov = null
+  let particleCameraAspect = null
+  let appliedBloomStrength = null
+  let appliedBloomRadius = null
+  let appliedBloomThreshold = null
 
   function applyRenderScale(
     resolution = performanceConfig.resolution,
@@ -340,23 +350,33 @@ import Lenis from 'lenis';
 
     uniforms.cam_vel.value = observer.velocity
 
-    uniforms.bg_texture.value = textures.get('bg1')
-    uniforms.star_texture.value = textures.get('star')
-    uniforms.disk_texture.value = textures.get('disk')
-
     // sync particle camera to observer so 3D positions are correct
-    particleCamera.fov = observer.fov
-    particleCamera.aspect = window.innerWidth / window.innerHeight
-    particleCamera.updateProjectionMatrix()
+    const nextParticleAspect = window.innerWidth / window.innerHeight
+    if (particleCameraFov !== observer.fov || particleCameraAspect !== nextParticleAspect) {
+      particleCameraFov = observer.fov
+      particleCameraAspect = nextParticleAspect
+      particleCamera.fov = particleCameraFov
+      particleCamera.aspect = particleCameraAspect
+      particleCamera.updateProjectionMatrix()
+    }
     particleCamera.position.copy(observer.position)
     particleCamera.up.copy(observer.up)
     particleCamera.lookAt(0, 0, 0)
     particleCamera.updateMatrixWorld()
 
 
-    bloomPass.strength = bloomConfig.strength
-    bloomPass.radius = bloomConfig.radius
-    bloomPass.threshold = bloomConfig.threshold
+    if (appliedBloomStrength !== bloomConfig.strength) {
+      appliedBloomStrength = bloomConfig.strength
+      bloomPass.strength = appliedBloomStrength
+    }
+    if (appliedBloomRadius !== bloomConfig.radius) {
+      appliedBloomRadius = bloomConfig.radius
+      bloomPass.radius = appliedBloomRadius
+    }
+    if (appliedBloomThreshold !== bloomConfig.threshold) {
+      appliedBloomThreshold = bloomConfig.threshold
+      bloomPass.threshold = appliedBloomThreshold
+    }
 
 
     observer.distance = cameraConfig.distance
