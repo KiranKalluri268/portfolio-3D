@@ -6,8 +6,10 @@ export class ThreeDQualityManager {
     healthyFrameMs = 18,
     heavyFrameMs = 20,
     panicFrameMs = 50,
+    maxFrameGapMs = 250,
     heavyFrameLimit = 5,
     cooldownMs = 7000,
+    ignoredFramesAfterChange = 5,
     upgradeStableMs = 3000,
     mediumHeavyFrameLimit = 20,
     lowToMediumProbeMs = 8000,
@@ -25,6 +27,7 @@ export class ThreeDQualityManager {
     this.healthyFrameMs = healthyFrameMs;
     this.heavyFrameMs = heavyFrameMs;
     this.panicFrameMs = panicFrameMs;
+    this.maxFrameGapMs = maxFrameGapMs;
 
     // Heavy frames build pressure quickly; healthy frames bleed pressure off.
     this.heavyFrameLimit = heavyFrameLimit;
@@ -42,6 +45,8 @@ export class ThreeDQualityManager {
     // signals until the cooldown expires. Panic frames can still downgrade.
     this.cooldownMs = cooldownMs;
     this.cooldownRemainingMs = 0;
+    this.ignoredFramesAfterChange = ignoredFramesAfterChange;
+    this.ignoredFramesRemaining = 0;
 
     // Runtime upgrades are intentionally stricter than downgrades.
     this.upgradeStableMs = upgradeStableMs;
@@ -70,6 +75,7 @@ export class ThreeDQualityManager {
     this.currentTier = tier;
     this.heavyFrameCounter = 0;
     this.upgradeStableElapsedMs = 0;
+    this.ignoredFramesRemaining = this.ignoredFramesAfterChange;
     if (tier !== 'medium') {
       this.mediumProbeActive = false;
       this.mediumProbeElapsedMs = 0;
@@ -90,6 +96,20 @@ export class ThreeDQualityManager {
     this.previousTimestampMs = timestampMs;
 
     if (frameMs <= 0) return;
+
+    // Long gaps come from tab suspension, sleep, or debugger pauses. They are
+    // not valid GPU samples and must never trigger panic downgrades.
+    if (frameMs > this.maxFrameGapMs) {
+      this.resetTiming(timestampMs);
+      return;
+    }
+
+    // Tier changes recompile shaders and resize render targets. Ignore those
+    // deliberately expensive transition frames before judging the new tier.
+    if (this.ignoredFramesRemaining > 0) {
+      this.ignoredFramesRemaining--;
+      return;
+    }
 
     if (!this.warmupComplete) {
       this.updateWarmup(frameMs);
@@ -258,5 +278,11 @@ export class ThreeDQualityManager {
 
   isHighestTier() {
     return this.currentTier === this.tiers[this.tiers.length - 1];
+  }
+
+  resetTiming(timestampMs = null) {
+    this.previousTimestampMs = timestampMs;
+    this.heavyFrameCounter = 0;
+    this.upgradeStableElapsedMs = 0;
   }
 }

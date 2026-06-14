@@ -122,20 +122,20 @@ export async function createShaderProjectionPlane(uniforms) {
     let STEP, NSTEPS;
     switch (quality) {
       case 'low':
-        STEP = 0.15;
-        NSTEPS = 350;
+        STEP = 0.16;
+        NSTEPS = 280;
         break;
       case 'medium':
-        STEP = 0.08;
-        NSTEPS = 650;
+        STEP = 0.09;
+        NSTEPS = 500;
         break;
       case 'high':
-        STEP = 0.04;
-        NSTEPS = 1300;
+        STEP = 0.055;
+        NSTEPS = 850;
         break;
       default:
-        STEP = 0.04;
-        NSTEPS = 1300;
+        STEP = 0.09;
+        NSTEPS = 500;
     }
     return `
   #define STEP ${STEP} 

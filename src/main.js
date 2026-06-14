@@ -19,6 +19,7 @@ import Lenis from 'lenis';
   const PERFORMANCE_PRESETS = {
     low: {
       resolution: 0.5,
+      maxPixelRatio: 1.0,
       quality: 'low',
       bloomStrength: 1,
       bloomRadius: 0.4,
@@ -26,6 +27,7 @@ import Lenis from 'lenis';
     },
     medium: {
       resolution: 0.75,
+      maxPixelRatio: 1.25,
       quality: 'medium',
       bloomStrength: 1,
       bloomRadius: 0.4,
@@ -33,6 +35,7 @@ import Lenis from 'lenis';
     },
     high: {
       resolution: 1.0,
+      maxPixelRatio: 1.5,
       quality: 'high',
       bloomStrength: 1,
       bloomRadius: 0.4,
@@ -40,7 +43,7 @@ import Lenis from 'lenis';
     },
   };
 
-  // ── FPS Tracking & Auto-Detect State ──
+  // Initial loading and frame-time benchmark state.
   let texturesLoaded = false;
   let initialQualityBenchmarkComplete = false;
   let loadingOverlayDismissed = false;
@@ -108,13 +111,21 @@ import Lenis from 'lenis';
   const DEFAULT_ELEVATION = 5 * Math.PI / 180 // 5° — default camera elevation above disk
 
   // Resize handler — only fires on actual window resize, not every frame
-  function applyRenderScale(resolution = performanceConfig.resolution) {
+  function applyRenderScale(
+    resolution = performanceConfig.resolution,
+    maxPixelRatio = PERFORMANCE_PRESETS[performanceConfig.preset]?.maxPixelRatio ?? 1.5
+  ) {
     performanceConfig.resolution = resolution
-    renderer.setPixelRatio(window.devicePixelRatio * resolution)
+    const pixelRatio = Math.min(window.devicePixelRatio * resolution, maxPixelRatio)
+    const renderWidth = Math.max(1, Math.floor(window.innerWidth * pixelRatio))
+    const renderHeight = Math.max(1, Math.floor(window.innerHeight * pixelRatio))
+
+    renderer.setPixelRatio(pixelRatio)
     renderer.setSize(window.innerWidth, window.innerHeight)
-    composer.setSize(window.innerWidth * resolution, window.innerHeight * resolution)
-    resizeParticleTargets(window.innerWidth * resolution, window.innerHeight * resolution)
-    uniforms.resolution.value.set(window.innerWidth * resolution, window.innerHeight * resolution)
+    composer.setPixelRatio(pixelRatio)
+    composer.setSize(window.innerWidth, window.innerHeight)
+    resizeParticleTargets(renderWidth, renderHeight)
+    uniforms.resolution.value.set(renderWidth, renderHeight)
   }
 
   function setPerformanceQuality(quality) {
@@ -130,7 +141,7 @@ import Lenis from 'lenis';
     bloomConfig.strength = preset.bloomStrength
     bloomConfig.radius = preset.bloomRadius
     setPerformanceQuality(preset.quality)
-    applyRenderScale(preset.resolution)
+    applyRenderScale(preset.resolution, preset.maxPixelRatio)
 
     if (syncQualityManager && qualityManager) {
       qualityManager.setTier(presetName)
@@ -149,8 +160,10 @@ import Lenis from 'lenis';
     healthyFrameMs: 18,
     heavyFrameMs: 20,
     panicFrameMs: 50,
+    maxFrameGapMs: 250,
     heavyFrameLimit: 5,
     cooldownMs: 7000,
+    ignoredFramesAfterChange: 5,
     upgradeStableMs: 8000,
     mediumHeavyFrameLimit: 20,
     lowToMediumProbeMs: 8000,
@@ -178,6 +191,12 @@ import Lenis from 'lenis';
   applyPerformancePreset('medium', false);
   handleResize()
 
+  document.addEventListener('visibilitychange', () => {
+    const now = performance.now();
+    qualityManager.resetTiming(document.hidden ? null : now);
+    lastframe = now;
+  });
+
   ready
     .then(() => {
       texturesLoaded = true;
@@ -199,7 +218,7 @@ import Lenis from 'lenis';
   // requestAnimationFrame passes a high-res timestamp automatically
   requestAnimationFrame(update);
 
-  // loading overlay will be dismissed by the auto-detect phase inside update()
+  // The overlay is dismissed after textures load and the benchmark completes.
 
 
   // UPDATING
@@ -217,7 +236,7 @@ import Lenis from 'lenis';
     const scrollFraction = Math.max(0, Math.min(1, lenis.scroll / scrollHeight));
     qualityManager.update(frameTimestamp);
 
-    // ── FPS Tracking & Dynamic Scaling ──
+    // Frame-time quality sampling is handled by ThreeDQualityManager.
 
     // ── Cinematic Camera Trajectory ──
     // 0.0 -> High Above (Dist: 25, Elev: 60°)

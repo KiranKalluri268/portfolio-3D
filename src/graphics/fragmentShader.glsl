@@ -173,16 +173,16 @@ void main()	{
     point += velocity * STEP;
     
     // distance from origin
-    distance = length(point);
-    
-    // Optmization: Replace expensive pow() with fast multiplication
-    float distSq = distance * distance;
+    float distSq = dot(point, point);
+    distance = sqrt(distSq);
+
+    // Optimization: Replace expensive pow() with fast multiplication.
     float dist5 = distSq * distSq * distance;
     
     vec3 accel = -1.5 * h2 * point / dist5;
     velocity += accel * STEP;    
     
-    bool horizon_mask = distance < 1.0 && length(oldpoint) > 1.0;// intersecting eventhorizon
+    bool horizon_mask = distSq < 1.0 && dot(oldpoint, oldpoint) > 1.0;// intersecting eventhorizon
     // does it enter event horizon?
     if (horizon_mask) {
       vec4 black = vec4(0.0,0.0,0.0,1.0);
