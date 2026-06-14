@@ -1,11 +1,11 @@
 import GUI from "lil-gui";
 
-export function createConfigGUI(changePerformanceQuality, changePerformancePreset, saveScreenshot) {
+export function createConfigGUI(changePerformanceQuality, changePerformancePreset, saveScreenshot, onConfigChange) {
 
   const gui = new GUI()
   gui.hide();
 
-  window.addEventListener('keydown', (event) => {
+  function handleKeydown(event) {
     if (event.ctrlKey && event.altKey && event.key.toLowerCase() === 'c') {
       if (gui.domElement.style.display === 'none') {
         gui.show();
@@ -13,7 +13,8 @@ export function createConfigGUI(changePerformanceQuality, changePerformancePrese
         gui.hide();
       }
     }
-  });
+  }
+  window.addEventListener('keydown', handleKeydown);
   const performanceConfig = addPerformanceConfig();
   const { diagnosticsConfig, updateDiagnostics } = addDiagnostics();
   const bloomConfig = addBloomConfig();
@@ -85,9 +86,9 @@ export function createConfigGUI(changePerformanceQuality, changePerformancePrese
     };
 
     const bloomFolder = gui.addFolder('Bloom')
-    bloomFolder.add(bloomConfig, 'strength', 0.0, 3.0)
-    bloomFolder.add(bloomConfig, 'radius', 0.0, 1.0)
-    bloomFolder.add(bloomConfig, 'threshold', 0.0, 1.0)
+    bloomFolder.add(bloomConfig, 'strength', 0.0, 3.0).onChange(value => onConfigChange('bloom', 'strength', value))
+    bloomFolder.add(bloomConfig, 'radius', 0.0, 1.0).onChange(value => onConfigChange('bloom', 'radius', value))
+    bloomFolder.add(bloomConfig, 'threshold', 0.0, 1.0).onChange(value => onConfigChange('bloom', 'threshold', value))
 
     return bloomConfig;
   }
@@ -101,9 +102,9 @@ export function createConfigGUI(changePerformanceQuality, changePerformancePrese
       particleOrbit: false  // when on, particles slowly revolve around the BH
     }
     const observerFolder = gui.addFolder('Observer')
-    observerFolder.add(cameraConfig, 'fov', 30, 90)
-    observerFolder.add(cameraConfig, 'orbit')
-    observerFolder.add(cameraConfig, 'enableDrag').name('Mouse Drag')
+    observerFolder.add(cameraConfig, 'fov', 30, 90).onChange(value => onConfigChange('camera', 'fov', value))
+    observerFolder.add(cameraConfig, 'orbit').onChange(value => onConfigChange('camera', 'orbit', value))
+    observerFolder.add(cameraConfig, 'enableDrag').name('Mouse Drag').onChange(value => onConfigChange('camera', 'enableDrag', value))
     observerFolder.add(cameraConfig, 'particleOrbit').name('Particle Orbit')
     observerFolder.open()
     return cameraConfig
@@ -119,12 +120,12 @@ export function createConfigGUI(changePerformanceQuality, changePerformancePrese
       show_lensing: true  // toggle background distortion arcs from gravitational lensing
     }
     let effectFolder = gui.addFolder('Effects')
-    effectFolder.add(effectConfig, 'lorentz_transform')
-    effectFolder.add(effectConfig, 'doppler_shift')
-    effectFolder.add(effectConfig, 'beaming')
-    effectFolder.add(effectConfig, 'accretion_disk')
-    effectFolder.add(effectConfig, 'use_disk_texture')
-    effectFolder.add(effectConfig, 'show_lensing').name('Lensing Arcs')
+    effectFolder.add(effectConfig, 'lorentz_transform').onChange(value => onConfigChange('effect', 'lorentz_transform', value))
+    effectFolder.add(effectConfig, 'doppler_shift').onChange(value => onConfigChange('effect', 'doppler_shift', value))
+    effectFolder.add(effectConfig, 'beaming').onChange(value => onConfigChange('effect', 'beaming', value))
+    effectFolder.add(effectConfig, 'accretion_disk').onChange(value => onConfigChange('effect', 'accretion_disk', value))
+    effectFolder.add(effectConfig, 'use_disk_texture').onChange(value => onConfigChange('effect', 'use_disk_texture', value))
+    effectFolder.add(effectConfig, 'show_lensing').name('Lensing Arcs').onChange(value => onConfigChange('effect', 'show_lensing', value))
     effectFolder.open()
     return effectConfig;
   }
@@ -143,6 +144,10 @@ export function createConfigGUI(changePerformanceQuality, changePerformancePrese
     effectConfig,
     cameraConfig,
     diagnosticsConfig,
-    updateDiagnostics
+    updateDiagnostics,
+    disposeGUI: () => {
+      window.removeEventListener('keydown', handleKeydown);
+      gui.destroy();
+    }
   }
 }

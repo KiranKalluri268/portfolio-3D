@@ -35,6 +35,8 @@ export class CameraDragControls {
     // up stays as world-Y (0,1,0) — look-at handles orientation, no tilt needed
 
     this.enabled = true;
+    this.eventController = new AbortController();
+    this.eventSignal = this.eventController.signal;
 
     this.lookSpeed = 0.005;
     this.pinchScrollSpeed = 2.5; // how aggressively pinch maps to scroll
@@ -111,7 +113,7 @@ export class CameraDragControls {
   addMouseEventHandlers() {
     this.domElement.addEventListener('contextmenu', (event) => {
       event.preventDefault();
-    });
+    }, { signal: this.eventSignal });
 
     this.domElement.addEventListener('mousemove', (event) => {
       if (this.mouseDragOn) {
@@ -129,7 +131,7 @@ export class CameraDragControls {
         this.lastX = newX;
         this.lastY = newY;
       }
-    });
+    }, { signal: this.eventSignal });
 
     this.domElement.addEventListener('mousedown', event => {
       if (isHTMLElement(this.domElement)) {
@@ -145,7 +147,7 @@ export class CameraDragControls {
         this.lastX = event.pageX - this.domElement.offsetLeft - this.viewHalfX;
         this.lastY = event.pageY - this.domElement.offsetTop - this.viewHalfY;
       }
-    });
+    }, { signal: this.eventSignal });
 
     this.domElement.addEventListener('mouseup', (event) => {
       event.preventDefault();
@@ -154,7 +156,7 @@ export class CameraDragControls {
       this.mouseDragOn = false;
       this.offsetX = 0;
       this.offsetY = 0;
-    });
+    }, { signal: this.eventSignal });
   }
 
 
@@ -174,7 +176,7 @@ export class CameraDragControls {
         this.touchDragOn = false;
         this.pinchStartDist = this._pinchDist(event.touches);
       }
-    }, { passive: true });
+    }, { passive: true, signal: this.eventSignal });
 
     this.domElement.addEventListener('touchmove', (event) => {
       if (event.touches.length === 2) {
@@ -206,13 +208,17 @@ export class CameraDragControls {
 
       this.lastTouchX = touch.clientX;
       this.lastTouchY = touch.clientY;
-    }, { passive: false }); // passive:false needed to allow preventDefault on horizontal
+    }, { passive: false, signal: this.eventSignal }); // passive:false needed to allow preventDefault on horizontal
 
     this.domElement.addEventListener('touchend', () => {
       this.touchDragOn = false;
       this.touchAxisLocked = null;
       this.offsetX = 0;
-    }, { passive: true });
+    }, { passive: true, signal: this.eventSignal });
+  }
+
+  dispose() {
+    this.eventController.abort();
   }
 
   /** Returns distance between two touch points */

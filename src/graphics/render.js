@@ -35,8 +35,15 @@ export function createScene(renderer) {
   composer.addPass(renderPass);
   composer.addPass(bloomPass);
 
+  function dispose() {
+    renderPass.dispose?.();
+    bloomPass.dispose?.();
+    composer.renderTarget1?.dispose();
+    composer.renderTarget2?.dispose();
+  }
+
   return {
-    scene, composer, bloomPass
+    scene, composer, bloomPass, disposeScene: dispose
   }
 }
 
@@ -57,7 +64,7 @@ export function loadTextures() {
   loadTexture('star', starUrl, THREE.LinearFilter)
   loadTexture('disk', diskUrl, THREE.LinearFilter)
 
-  window.onbeforeunload = () => {
+  function dispose() {
     for (const texture of textures.values()) {
       if (texture) texture.dispose();
     }
@@ -66,7 +73,7 @@ export function loadTextures() {
   // resolves when all textures have loaded
   const ready = Promise.all(pending);
 
-  return { textures, ready };
+  return { textures, ready, disposeTextures: dispose };
 
   function loadTexture(name, image, interpolation, wrap = THREE.ClampToEdgeWrapping) {
     textures.set(name, null);
@@ -105,6 +112,11 @@ export async function createShaderProjectionPlane(uniforms) {
 
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material)
 
+  function dispose() {
+    mesh.geometry.dispose();
+    material.dispose();
+  }
+
 
   async function changePerformanceQuality(quality) {
     const defines = getShaderDefineConstant(quality);
@@ -140,7 +152,8 @@ export async function createShaderProjectionPlane(uniforms) {
 
   return {
     mesh,
-    changePerformanceQuality
+    changePerformanceQuality,
+    disposeShaderPlane: dispose
   };
 }
 
@@ -199,7 +212,8 @@ export function createParticleSystem() {
   }
   const geoS = new THREE.BufferGeometry();
   geoS.setAttribute('position', new THREE.BufferAttribute(posS, 3));
-  sceneLensed.add(new THREE.Points(geoS, new THREE.PointsMaterial({ ...matBase, size: 0.08 })));
+  const materialS = new THREE.PointsMaterial({ ...matBase, size: 0.08 });
+  sceneLensed.add(new THREE.Points(geoS, materialS));
 
   // Layer 2: fewer brighter slightly-larger stars (foreground highlights)
   const COUNT_B = 300;
@@ -214,7 +228,8 @@ export function createParticleSystem() {
   }
   const geoB = new THREE.BufferGeometry();
   geoB.setAttribute('position', new THREE.BufferAttribute(posB, 3));
-  sceneUnlensed.add(new THREE.Points(geoB, new THREE.PointsMaterial({ ...matBase, size: 0.11 })));
+  const materialB = new THREE.PointsMaterial({ ...matBase, size: 0.11 });
+  sceneUnlensed.add(new THREE.Points(geoB, materialB));
 
   function resize(width, height) {
     if (width === targetWidth && height === targetHeight) return;
@@ -227,12 +242,23 @@ export function createParticleSystem() {
     camera.updateProjectionMatrix();
   }
 
+  function dispose() {
+    geoS.dispose();
+    geoB.dispose();
+    materialS.dispose();
+    materialB.dispose();
+    pointTex.dispose();
+    targetLensed.dispose();
+    targetUnlensed.dispose();
+  }
+
   return { 
     particleSceneLensed: sceneLensed, 
     particleTargetLensed: targetLensed,
     particleSceneUnlensed: sceneUnlensed, 
     particleTargetUnlensed: targetUnlensed,
     particleCamera: camera,
-    resizeParticleTargets: resize
+    resizeParticleTargets: resize,
+    disposeParticleSystem: dispose
   };
 }

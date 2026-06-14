@@ -72,12 +72,12 @@ import Lenis from 'lenis';
 
   // create scene, 3d context, etc.. instances
   const renderer = createRenderer()
-  const { composer, bloomPass, scene } = createScene(renderer);
+  const { composer, bloomPass, scene, disposeScene } = createScene(renderer);
   document.body.appendChild(renderer.domElement)
 
   // init graphics — textures load async; ready resolves when all are done
-  const { textures, ready } = loadTextures();
-  const { mesh, changePerformanceQuality } = await createShaderProjectionPlane(uniforms);
+  const { textures, ready, disposeTextures } = loadTextures();
+  const { mesh, changePerformanceQuality, disposeShaderPlane } = await createShaderProjectionPlane(uniforms);
   // add shader plane to scene
   scene.add(mesh);
 
@@ -92,7 +92,8 @@ import Lenis from 'lenis';
     particleSceneUnlensed, 
     particleTargetUnlensed,
     particleCamera,
-    resizeParticleTargets
+    resizeParticleTargets,
+    disposeParticleSystem
   } = createParticleSystem();
   uniforms.particle_texture.value = particleTargetLensed.texture;
   uniforms.particle_texture_unlensed.value = particleTargetUnlensed.texture;
@@ -103,12 +104,13 @@ import Lenis from 'lenis';
   });
 
   // GUI
-  let cameraConfig, effectConfig, performanceConfig, bloomConfig, updateDiagnostics;
+  let cameraConfig, effectConfig, performanceConfig, bloomConfig, updateDiagnostics, disposeGUI;
   let qualityManager;
-  ({ cameraConfig, effectConfig, performanceConfig, bloomConfig, updateDiagnostics } = createConfigGUI(
+  ({ cameraConfig, effectConfig, performanceConfig, bloomConfig, updateDiagnostics, disposeGUI } = createConfigGUI(
     changePerformanceQuality,
     applyPerformancePreset,
-    saveToScreenshot
+    saveToScreenshot,
+    applyConfigChange
   ));
   const stats = createStatsGUI();
   document.body.appendChild(stats.dom);
@@ -121,9 +123,6 @@ import Lenis from 'lenis';
   let renderPixelRatio = 0
   let particleCameraFov = null
   let particleCameraAspect = null
-  let appliedBloomStrength = null
-  let appliedBloomRadius = null
-  let appliedBloomThreshold = null
   let lastDiagnosticsUpdate = 0
 
   function applyRenderScale(
@@ -158,6 +157,45 @@ import Lenis from 'lenis';
     changePerformanceQuality(quality)
   }
 
+  function applyConfigChange(group, property, value) {
+    if (group === 'bloom') {
+      bloomPass[property] = value
+      return
+    }
+
+    if (group === 'camera') {
+      if (property === 'fov') {
+        observer.fov = value
+        return
+      }
+      if (property === 'orbit') {
+        observer.moving = value
+        return
+      }
+      if (property === 'enableDrag') {
+        cameraControl.enabled = value
+      }
+      return
+    }
+
+    const uniform = uniforms[property]
+    if (group === 'effect' && uniform) {
+      uniform.value = value
+    }
+  }
+
+  function applyInitialConfig() {
+    applyConfigChange('bloom', 'strength', bloomConfig.strength)
+    applyConfigChange('bloom', 'radius', bloomConfig.radius)
+    applyConfigChange('bloom', 'threshold', bloomConfig.threshold)
+    applyConfigChange('camera', 'fov', cameraConfig.fov)
+    applyConfigChange('camera', 'orbit', cameraConfig.orbit)
+    applyConfigChange('camera', 'enableDrag', cameraConfig.enableDrag)
+    for (const [property, value] of Object.entries(effectConfig)) {
+      applyConfigChange('effect', property, value)
+    }
+  }
+
   function applyPerformancePreset(presetName, syncQualityManager = true) {
     const preset = PERFORMANCE_PRESETS[presetName] ?? PERFORMANCE_PRESETS.high
 
@@ -165,6 +203,8 @@ import Lenis from 'lenis';
     performanceConfig.particleScale = preset.particleScale
     bloomConfig.strength = preset.bloomStrength
     bloomConfig.radius = preset.bloomRadius
+    applyConfigChange('bloom', 'strength', bloomConfig.strength)
+    applyConfigChange('bloom', 'radius', bloomConfig.radius)
     setPerformanceQuality(preset.quality)
     applyRenderScale(preset.resolution, preset.maxPixelRatio)
 
@@ -215,13 +255,15 @@ import Lenis from 'lenis';
   });
 
   applyPerformancePreset('medium', false);
+  applyInitialConfig();
   handleResize()
 
-  document.addEventListener('visibilitychange', () => {
+  function handleVisibilityChange() {
     const now = performance.now();
     qualityManager.resetTiming(document.hidden ? null : now);
     lastframe = now;
-  });
+  }
+  document.addEventListener('visibilitychange', handleVisibilityChange);
 
   ready
     .then(() => {
@@ -242,7 +284,7 @@ import Lenis from 'lenis';
 
   // start render loop immediately (renders black until textures arrive)
   // requestAnimationFrame passes a high-res timestamp automatically
-  requestAnimationFrame(update);
+  let animationFrameId = requestAnimationFrame(update);
 
   // The overlay is dismissed after textures load and the benchmark completes.
 
@@ -323,7 +365,7 @@ import Lenis from 'lenis';
     render();
 
     // loop
-    requestAnimationFrame(update)
+    animationFrameId = requestAnimationFrame(update)
     lastframe = frameTimestamp
   }
 
@@ -371,30 +413,7 @@ import Lenis from 'lenis';
     particleCamera.updateMatrixWorld()
 
 
-    if (appliedBloomStrength !== bloomConfig.strength) {
-      appliedBloomStrength = bloomConfig.strength
-      bloomPass.strength = appliedBloomStrength
-    }
-    if (appliedBloomRadius !== bloomConfig.radius) {
-      appliedBloomRadius = bloomConfig.radius
-      bloomPass.radius = appliedBloomRadius
-    }
-    if (appliedBloomThreshold !== bloomConfig.threshold) {
-      appliedBloomThreshold = bloomConfig.threshold
-      bloomPass.threshold = appliedBloomThreshold
-    }
-
-
     observer.distance = cameraConfig.distance
-    observer.moving = cameraConfig.orbit
-    observer.fov = cameraConfig.fov
-    cameraControl.enabled = cameraConfig.enableDrag  // gate mouse drag via GUI toggle
-    uniforms.lorentz_transform.value = effectConfig.lorentz_transform
-    uniforms.accretion_disk.value = effectConfig.accretion_disk
-    uniforms.use_disk_texture.value = effectConfig.use_disk_texture
-    uniforms.doppler_shift.value = effectConfig.doppler_shift
-    uniforms.beaming.value = effectConfig.beaming
-    uniforms.show_lensing.value = effectConfig.show_lensing
   }
 
   function dismissLoadingOverlayIfReady() {
@@ -407,6 +426,28 @@ import Lenis from 'lenis';
       overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
     }
   }
+
+  let appDisposed = false;
+  function disposeApp() {
+    if (appDisposed) return;
+    appDisposed = true;
+
+    cancelAnimationFrame(animationFrameId);
+    window.removeEventListener('resize', handleResize);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.removeEventListener('beforeunload', disposeApp);
+    lenis.destroy();
+    cameraControl.dispose();
+    disposeGUI();
+    disposeParticleSystem();
+    disposeShaderPlane();
+    disposeScene();
+    disposeTextures();
+    renderer.dispose();
+    renderer.domElement.remove();
+    stats.dom.remove();
+  }
+  window.addEventListener('beforeunload', disposeApp);
 
   // https://r105.threejsfundamentals.org/threejs/lessons/threejs-tips.html
   function saveToScreenshot() {
