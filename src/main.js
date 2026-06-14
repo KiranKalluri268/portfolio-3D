@@ -103,9 +103,9 @@ import Lenis from 'lenis';
   });
 
   // GUI
-  let cameraConfig, effectConfig, performanceConfig, bloomConfig;
+  let cameraConfig, effectConfig, performanceConfig, bloomConfig, updateDiagnostics;
   let qualityManager;
-  ({ cameraConfig, effectConfig, performanceConfig, bloomConfig } = createConfigGUI(
+  ({ cameraConfig, effectConfig, performanceConfig, bloomConfig, updateDiagnostics } = createConfigGUI(
     changePerformanceQuality,
     applyPerformancePreset,
     saveToScreenshot
@@ -124,6 +124,7 @@ import Lenis from 'lenis';
   let appliedBloomStrength = null
   let appliedBloomRadius = null
   let appliedBloomThreshold = null
+  let lastDiagnosticsUpdate = 0
 
   function applyRenderScale(
     resolution = performanceConfig.resolution,
@@ -259,6 +260,10 @@ import Lenis from 'lenis';
     const scrollHeight = Math.max(1, document.body.scrollHeight - window.innerHeight);
     const scrollFraction = Math.max(0, Math.min(1, lenis.scroll / scrollHeight));
     qualityManager.update(frameTimestamp);
+    if (frameTimestamp - lastDiagnosticsUpdate >= 250) {
+      lastDiagnosticsUpdate = frameTimestamp
+      updateDiagnostics(qualityManager.getDiagnostics())
+    }
 
     // Frame-time quality sampling is handled by ThreeDQualityManager.
 

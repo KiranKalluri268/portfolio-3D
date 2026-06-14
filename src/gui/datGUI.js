@@ -15,6 +15,7 @@ export function createConfigGUI(changePerformanceQuality, changePerformancePrese
     }
   });
   const performanceConfig = addPerformanceConfig();
+  const { diagnosticsConfig, updateDiagnostics } = addDiagnostics();
   const bloomConfig = addBloomConfig();
   const cameraConfig = addCameraConfig();
   const effectConfig = addEffectConfig();
@@ -36,6 +37,44 @@ export function createConfigGUI(changePerformanceQuality, changePerformancePrese
     perfFolder.open();
 
     return performanceConfig;
+  }
+
+  function addDiagnostics() {
+    const diagnosticsConfig = {
+      tier: 'medium',
+      frameMs: '0.00',
+      heavyFrames: 0,
+      cooldownSeconds: '0.0',
+      probeActive: false,
+      probeSeconds: '0.0',
+      probeHeavyFrames: 0,
+      warmupComplete: false,
+      reason: 'startup'
+    };
+    const diagnosticsFolder = gui.addFolder('Diagnostics');
+    diagnosticsFolder.add(diagnosticsConfig, 'tier').listen().disable();
+    diagnosticsFolder.add(diagnosticsConfig, 'frameMs').name('Frame Time (ms)').listen().disable();
+    diagnosticsFolder.add(diagnosticsConfig, 'heavyFrames').listen().disable();
+    diagnosticsFolder.add(diagnosticsConfig, 'cooldownSeconds').name('Cooldown (s)').listen().disable();
+    diagnosticsFolder.add(diagnosticsConfig, 'probeActive').listen().disable();
+    diagnosticsFolder.add(diagnosticsConfig, 'probeSeconds').name('Probe Time (s)').listen().disable();
+    diagnosticsFolder.add(diagnosticsConfig, 'probeHeavyFrames').listen().disable();
+    diagnosticsFolder.add(diagnosticsConfig, 'warmupComplete').listen().disable();
+    diagnosticsFolder.add(diagnosticsConfig, 'reason').listen().disable();
+
+    function updateDiagnostics(diagnostics) {
+      diagnosticsConfig.tier = diagnostics.tier;
+      diagnosticsConfig.frameMs = diagnostics.frameMs.toFixed(2);
+      diagnosticsConfig.heavyFrames = diagnostics.heavyFrames;
+      diagnosticsConfig.cooldownSeconds = (diagnostics.cooldownMs / 1000).toFixed(1);
+      diagnosticsConfig.probeActive = diagnostics.probeActive;
+      diagnosticsConfig.probeSeconds = (diagnostics.probeElapsedMs / 1000).toFixed(1);
+      diagnosticsConfig.probeHeavyFrames = diagnostics.probeHeavyFrames;
+      diagnosticsConfig.warmupComplete = diagnostics.warmupComplete;
+      diagnosticsConfig.reason = diagnostics.reason;
+    }
+
+    return { diagnosticsConfig, updateDiagnostics };
   }
 
   function addBloomConfig() {
@@ -102,6 +141,8 @@ export function createConfigGUI(changePerformanceQuality, changePerformancePrese
     performanceConfig,
     bloomConfig,
     effectConfig,
-    cameraConfig
+    cameraConfig,
+    diagnosticsConfig,
+    updateDiagnostics
   }
 }

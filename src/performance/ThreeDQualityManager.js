@@ -64,6 +64,8 @@ export class ThreeDQualityManager {
     this.mediumProbeHeavyFrames = 0;
 
     this.previousTimestampMs = null;
+    this.latestFrameMs = 0;
+    this.lastAdjustmentReason = 'startup';
     this.onQualityDowngrade = onQualityDowngrade;
     this.onQualityUpgrade = onQualityUpgrade;
     this.onWarmupComplete = onWarmupComplete;
@@ -94,6 +96,7 @@ export class ThreeDQualityManager {
 
     const frameMs = timestampMs - this.previousTimestampMs;
     this.previousTimestampMs = timestampMs;
+    this.latestFrameMs = frameMs;
 
     if (frameMs <= 0) return;
 
@@ -214,6 +217,7 @@ export class ThreeDQualityManager {
   }
 
   startMediumProbe() {
+    this.lastAdjustmentReason = 'low-to-medium-probe';
     this.mediumProbeActive = true;
     this.mediumProbeElapsedMs = 0;
     this.mediumProbeHeavyFrames = 0;
@@ -243,6 +247,7 @@ export class ThreeDQualityManager {
   }
 
   failMediumProbe() {
+    this.lastAdjustmentReason = 'medium-probe-failed';
     this.mediumProbeActive = false;
     this.mediumProbeElapsedMs = 0;
     this.mediumProbeHeavyFrames = 0;
@@ -260,6 +265,7 @@ export class ThreeDQualityManager {
     }
 
     const nextTier = this.tiers[tierIndex - 1];
+    this.lastAdjustmentReason = reason;
     this.setTier(nextTier);
     this.onQualityDowngrade(nextTier, { reason });
   }
@@ -272,6 +278,7 @@ export class ThreeDQualityManager {
     }
 
     const nextTier = this.tiers[tierIndex + 1];
+    this.lastAdjustmentReason = reason;
     this.setTier(nextTier);
     this.onQualityUpgrade(nextTier, { reason });
   }
@@ -284,5 +291,19 @@ export class ThreeDQualityManager {
     this.previousTimestampMs = timestampMs;
     this.heavyFrameCounter = 0;
     this.upgradeStableElapsedMs = 0;
+  }
+
+  getDiagnostics() {
+    return {
+      tier: this.currentTier,
+      frameMs: this.latestFrameMs,
+      heavyFrames: this.heavyFrameCounter,
+      cooldownMs: this.cooldownRemainingMs,
+      probeActive: this.mediumProbeActive,
+      probeElapsedMs: this.mediumProbeElapsedMs,
+      probeHeavyFrames: this.mediumProbeHeavyFrames,
+      warmupComplete: this.warmupComplete,
+      reason: this.lastAdjustmentReason,
+    };
   }
 }
