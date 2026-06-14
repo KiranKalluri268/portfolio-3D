@@ -20,6 +20,7 @@ export class ThreeDQualityManager {
     onQualityDowngrade = () => {},
     onQualityUpgrade = () => {},
     onWarmupComplete = () => {},
+    onMediumProbeComplete = () => {},
   } = {}) {
     this.tiers = tiers;
     this.currentTier = initialTier;
@@ -72,6 +73,7 @@ export class ThreeDQualityManager {
     this.onQualityDowngrade = onQualityDowngrade;
     this.onQualityUpgrade = onQualityUpgrade;
     this.onWarmupComplete = onWarmupComplete;
+    this.onMediumProbeComplete = onMediumProbeComplete;
   }
 
   setTier(tier, { startCooldown = true } = {}) {
@@ -127,13 +129,15 @@ export class ThreeDQualityManager {
 
       // Panic frames indicate a backed-up GPU queue; downgrade even in cooldown.
       if (frameMs > this.panicFrameMs) {
-        this.downgrade('panic');
+        if (this.mediumProbeActive) this.failMediumProbe();
+        else this.downgrade('panic');
       }
       return;
     }
 
     if (frameMs > this.panicFrameMs) {
-      this.downgrade('panic');
+      if (this.mediumProbeActive) this.failMediumProbe();
+      else this.downgrade('panic');
       return;
     }
 
@@ -226,6 +230,7 @@ export class ThreeDQualityManager {
     this.mediumProbeElapsedMs = 0;
     this.mediumProbeHeavyFrames = 0;
     this.setTier('medium', { startCooldown: false });
+    this.cooldownRemainingMs = 0;
     this.mediumProbeActive = true;
     this.onQualityUpgrade('medium', { reason: 'low-to-medium-probe' });
   }
@@ -247,6 +252,7 @@ export class ThreeDQualityManager {
       this.mediumProbeElapsedMs = 0;
       this.mediumProbeHeavyFrames = 0;
       this.cooldownRemainingMs = this.cooldownMs;
+      this.onMediumProbeComplete({ accepted: true, tier: 'medium' });
     }
   }
 
@@ -258,6 +264,7 @@ export class ThreeDQualityManager {
     this.setTier('low', { startCooldown: false });
     this.cooldownRemainingMs = this.failedProbeCooldownMs;
     this.onQualityDowngrade('low', { reason: 'medium-probe-failed' });
+    this.onMediumProbeComplete({ accepted: false, tier: 'low' });
   }
 
   downgrade(reason) {

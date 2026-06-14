@@ -55,10 +55,12 @@ export function createCamera(renderer) {
   }
 }
 
-export function loadTextures() {
+export function loadTextures(onProgress = () => {}) {
   const textures = new Map();
   const textureLoader = new THREE.TextureLoader()
   const pending = [];
+  let loadedCount = 0;
+  const totalCount = 3;
 
   loadTexture('bg1', milkywayUrl, THREE.NearestFilter)
   loadTexture('star', starUrl, THREE.LinearFilter)
@@ -84,9 +86,13 @@ export function loadTextures() {
         texture.wrapT = wrap
         texture.wrapS = wrap
         textures.set(name, texture);
+        loadedCount++;
+        onProgress({ name, loaded: loadedCount, total: totalCount });
         resolve();
       }, undefined, (error) => {
         console.error(`Failed to load texture "${name}"`, error);
+        loadedCount++;
+        onProgress({ name, loaded: loadedCount, total: totalCount, failed: true });
         reject(error);
       });
     });

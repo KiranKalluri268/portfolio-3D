@@ -14,8 +14,14 @@
 
     <!-- Loading overlay — dismissed by main.js once all textures are ready -->
     <div id="loading-overlay">
-      <div class="loading-ring outer"></div>
-      <div class="loading-ring inner"></div>
+      <div class="loading-visual" aria-hidden="true">
+        <div class="loading-ring outer"></div>
+        <div class="loading-ring inner"></div>
+      </div>
+      <div class="loading-copy" role="status" aria-live="polite">
+        <div id="loading-percentage">0%</div>
+        <div id="loading-status">Initializing renderer...</div>
+      </div>
     </div>
 
     <script type="x-shader/x-vertex" id="vertexShader">  

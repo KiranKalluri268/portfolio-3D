@@ -3,6 +3,13 @@ body {
   height: 1100vh;
 }
 
+html.is-loading,
+html.is-loading body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
 canvas { 
   position: fixed;
   top: 0;
@@ -18,6 +25,7 @@ canvas {
   z-index: 100;
   background: #000;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   opacity: 1;
@@ -31,6 +39,8 @@ canvas {
 
 .loading-ring {
   position: absolute;
+  inset: 0;
+  margin: auto;
   border-radius: 50%;
   border: 2px solid transparent;
 }
@@ -57,4 +67,30 @@ canvas {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
+}
+
+.loading-visual {
+  position: relative;
+  width: 124px;
+  height: 124px;
+}
+
+.loading-copy {
+  margin-top: 28px;
+  color: #fff5e0;
+  text-align: center;
+  font-family: Arial, sans-serif;
+  letter-spacing: 0;
+}
+
+#loading-percentage {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+#loading-status {
+  min-width: 280px;
+  margin-top: 8px;
+  color: rgba(255, 245, 224, 0.72);
+  font-size: 13px;
 }

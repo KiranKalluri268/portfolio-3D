@@ -9,6 +9,37 @@ import Lenis from 'lenis';
 
 (async () => {
 
+  const loadingOverlay = document.getElementById('loading-overlay')
+  const loadingPercentage = document.getElementById('loading-percentage')
+  const loadingStatus = document.getElementById('loading-status')
+  let loadingTargetProgress = 0
+  let loadingDisplayedProgress = 0
+  let loadingReadyToDismiss = false
+  document.documentElement.classList.add('is-loading')
+  window.scrollTo(0, 0)
+
+  function setLoadingStage(message, progress) {
+    loadingTargetProgress = Math.max(loadingTargetProgress, progress)
+    if (loadingStatus) loadingStatus.textContent = message
+  }
+
+  function updateLoadingProgress() {
+    loadingDisplayedProgress += (loadingTargetProgress - loadingDisplayedProgress) * 0.08
+    if (loadingTargetProgress >= 100 && loadingDisplayedProgress > 99.5) loadingDisplayedProgress = 100
+    if (loadingPercentage) loadingPercentage.textContent = `${Math.floor(loadingDisplayedProgress)}%`
+    if (loadingReadyToDismiss && loadingDisplayedProgress === 100 && !loadingOverlayDismissed) {
+      loadingOverlayDismissed = true
+      document.documentElement.classList.remove('is-loading')
+      lenis.start()
+      if (loadingOverlay) {
+        loadingOverlay.classList.add('loaded')
+        loadingOverlay.addEventListener('transitionend', () => loadingOverlay.remove(), { once: true })
+      }
+    }
+  }
+
+  setLoadingStage('Initializing renderer...', 3)
+
   let lastframe = performance.now()
   let delta = 0
   let time = 0
@@ -46,6 +77,7 @@ import Lenis from 'lenis';
   // Initial loading and frame-time benchmark state.
   let texturesLoaded = false;
   let initialQualityBenchmarkComplete = false;
+  let benchmarkStarted = false;
   let loadingOverlayDismissed = false;
 
   // set variables types for shader
@@ -74,16 +106,22 @@ import Lenis from 'lenis';
   const renderer = createRenderer()
   const { composer, bloomPass, scene, disposeScene } = createScene(renderer);
   document.body.appendChild(renderer.domElement)
+  setLoadingStage('Loading assets...', 10)
 
   // init graphics — textures load async; ready resolves when all are done
-  const { textures, ready, disposeTextures } = loadTextures();
+  const { textures, ready, disposeTextures } = loadTextures(({ loaded, total }) => {
+    setLoadingStage(`Loading assets... ${loaded} / ${total}`, 10 + (loaded / total) * 60)
+  });
+  setLoadingStage('Compiling black hole shader...', 18)
   const { mesh, changePerformanceQuality, disposeShaderPlane } = await createShaderProjectionPlane(uniforms);
   // add shader plane to scene
   scene.add(mesh);
+  setLoadingStage('Initializing camera...', 22)
 
   // setup camera
   const { observer, cameraControl } = createCamera(renderer);
   scene.add(observer)
+  setLoadingStage('Initializing particle field...', 26)
 
   // particle system — 3D stars rendered to offscreen target, lensed in shader
   const { 
@@ -233,15 +271,21 @@ import Lenis from 'lenis';
     upgradeStableMs: 8000,
     mediumHeavyFrameLimit: 20,
     lowToMediumProbeMs: 8000,
-    mediumProbeEvaluationMs: 6000,
+    mediumProbeEvaluationMs: 4000,
     failedProbeCooldownMs: 20000,
     allowHighAutoUpgrade: false,
     onQualityDowngrade: (newTier, { reason }) => {
       console.log("Quality Manager: Downgraded to " + newTier + " (" + reason + ")");
+      if (benchmarkStarted && !initialQualityBenchmarkComplete) {
+        setLoadingStage(`Adjusting graphics to ${newTier}...`, 93)
+      }
       applyPerformancePreset(newTier, false);
     },
     onQualityUpgrade: (newTier, { reason }) => {
       console.log("Quality Manager: Upgraded to " + newTier + " (" + reason + ")");
+      if (benchmarkStarted && !initialQualityBenchmarkComplete) {
+        setLoadingStage(`Testing ${newTier} graphics...`, 96)
+      }
       applyPerformancePreset(newTier, false);
     },
     onWarmupComplete: ({ tier, heavyFrames, panicFrames }) => {
@@ -249,8 +293,22 @@ import Lenis from 'lenis';
         "Quality Manager: Warmup complete at " + tier +
         " (" + heavyFrames + " heavy frames, " + panicFrames + " panic frames)"
       );
-      initialQualityBenchmarkComplete = true;
-      dismissLoadingOverlayIfReady();
+      setTimeout(() => {
+        if (qualityManager.currentTier === 'low' && panicFrames === 0) {
+          setLoadingStage('Testing Medium graphics...', 96)
+          qualityManager.startMediumProbe()
+          return
+        }
+
+        initialQualityBenchmarkComplete = true;
+        setLoadingStage(`Selected ${qualityManager.currentTier} graphics`, 100)
+        dismissLoadingOverlayIfReady();
+      }, 0)
+    },
+    onMediumProbeComplete: ({ tier }) => {
+      initialQualityBenchmarkComplete = true
+      setLoadingStage(`Selected ${tier} graphics`, 100)
+      dismissLoadingOverlayIfReady()
     },
   });
 
@@ -268,12 +326,16 @@ import Lenis from 'lenis';
   ready
     .then(() => {
       texturesLoaded = true;
-      dismissLoadingOverlayIfReady();
+      benchmarkStarted = true;
+      qualityManager.resetTiming(performance.now());
+      setLoadingStage('Determining graphics settings for this device...', 90)
     })
     .catch((error) => {
       texturesLoaded = true;
       console.error('One or more textures failed to load.', error);
-      dismissLoadingOverlayIfReady();
+      benchmarkStarted = true;
+      qualityManager.resetTiming(performance.now());
+      setLoadingStage('Determining graphics settings for this device...', 90)
     });
 
   // Initialize Lenis for smooth scrolling
@@ -281,6 +343,7 @@ import Lenis from 'lenis';
     lerp: 0.1, // Smoothness
     smoothWheel: true,
   });
+  lenis.stop();
 
   // start render loop immediately (renders black until textures arrive)
   // requestAnimationFrame passes a high-res timestamp automatically
@@ -294,6 +357,7 @@ import Lenis from 'lenis';
   function update(timeNow) {
     // Lenis needs the high-res timestamp
     if (timeNow) lenis.raf(timeNow);
+    updateLoadingProgress()
 
     const frameTimestamp = timeNow ?? performance.now()
     delta = (frameTimestamp - lastframe) / 1000
@@ -301,7 +365,7 @@ import Lenis from 'lenis';
 
     // scroll logic
     const scrollViewportUnits = lenis.scroll / Math.max(1, window.innerHeight);
-    qualityManager.update(frameTimestamp);
+    if (benchmarkStarted) qualityManager.update(frameTimestamp);
     if (frameTimestamp - lastDiagnosticsUpdate >= 250) {
       lastDiagnosticsUpdate = frameTimestamp
       updateDiagnostics(qualityManager.getDiagnostics())
@@ -445,13 +509,8 @@ import Lenis from 'lenis';
 
   function dismissLoadingOverlayIfReady() {
     if (loadingOverlayDismissed || !texturesLoaded || !initialQualityBenchmarkComplete) return;
-
-    loadingOverlayDismissed = true;
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay) {
-      overlay.classList.add('loaded');
-      overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
-    }
+    loadingTargetProgress = 100
+    loadingReadyToDismiss = true
   }
 
   let appDisposed = false;
