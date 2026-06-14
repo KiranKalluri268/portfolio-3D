@@ -1,6 +1,6 @@
 import GUI from "lil-gui";
 
-export function createConfigGUI(changePerformanceQuality, changePerformancePreset, saveScreenshot, onConfigChange) {
+export function createConfigGUI(changePerformanceQuality, changePerformancePreset, saveScreenshot, onConfigChange, onVisibilityChange) {
 
   const gui = new GUI()
   gui.hide();
@@ -9,8 +9,10 @@ export function createConfigGUI(changePerformanceQuality, changePerformancePrese
     if (event.ctrlKey && event.altKey && event.key.toLowerCase() === 'c') {
       if (gui.domElement.style.display === 'none') {
         gui.show();
+        onVisibilityChange(true);
       } else {
         gui.hide();
+        onVisibilityChange(false);
       }
     }
   }

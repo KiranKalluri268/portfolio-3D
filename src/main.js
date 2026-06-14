@@ -148,9 +148,13 @@ import Lenis from 'lenis';
     changePerformanceQuality,
     applyPerformancePreset,
     saveToScreenshot,
-    applyConfigChange
+    applyConfigChange,
+    isVisible => {
+      stats.dom.style.display = isVisible ? 'block' : 'none'
+    }
   ));
   const stats = createStatsGUI();
+  stats.dom.style.display = 'none';
   document.body.appendChild(stats.dom);
 
   const DEFAULT_ELEVATION = 5 * Math.PI / 180 // 5° — default camera elevation above disk
