@@ -187,6 +187,7 @@ import Lenis from 'lenis';
     panicFrameMs: 50,
     maxFrameGapMs: 250,
     heavyFrameLimit: 5,
+    heavyFrameWindowMs: 1500,
     cooldownMs: 7000,
     ignoredFramesAfterChange: 5,
     upgradeStableMs: 8000,

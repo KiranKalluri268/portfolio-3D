@@ -8,6 +8,7 @@ export class ThreeDQualityManager {
     panicFrameMs = 50,
     maxFrameGapMs = 250,
     heavyFrameLimit = 5,
+    heavyFrameWindowMs = 1500,
     cooldownMs = 7000,
     ignoredFramesAfterChange = 5,
     upgradeStableMs = 3000,
@@ -29,9 +30,11 @@ export class ThreeDQualityManager {
     this.panicFrameMs = panicFrameMs;
     this.maxFrameGapMs = maxFrameGapMs;
 
-    // Heavy frames build pressure quickly; healthy frames bleed pressure off.
+    // Heavy-frame timestamps form a bounded rolling window. Old spikes expire
+    // automatically instead of influencing decisions indefinitely.
     this.heavyFrameLimit = heavyFrameLimit;
-    this.heavyFrameCounter = 0;
+    this.heavyFrameWindowMs = heavyFrameWindowMs;
+    this.heavyFrameTimestamps = [];
 
     // Progressive enhancement starts from a safe baseline and only upgrades
     // after sustained headroom during the initial benchmark window.
@@ -75,7 +78,7 @@ export class ThreeDQualityManager {
     if (!this.tiers.includes(tier)) return;
 
     this.currentTier = tier;
-    this.heavyFrameCounter = 0;
+    this.heavyFrameTimestamps.length = 0;
     this.upgradeStableElapsedMs = 0;
     this.ignoredFramesRemaining = this.ignoredFramesAfterChange;
     if (tier !== 'medium') {
@@ -140,21 +143,22 @@ export class ThreeDQualityManager {
     }
 
     if (frameMs > this.heavyFrameMs) {
-      this.heavyFrameCounter++;
       this.upgradeStableElapsedMs = 0;
+      this.recordHeavyFrame(timestampMs);
 
       const heavyLimit = this.currentTier === 'medium'
         ? this.mediumHeavyFrameLimit
         : this.heavyFrameLimit;
 
-      if (this.heavyFrameCounter > heavyLimit) {
+      if (this.heavyFrameTimestamps.length > heavyLimit) {
         this.downgrade('heavy-frame-budget');
       }
       return;
     }
 
+    this.pruneHeavyFrames(timestampMs);
+
     if (frameMs < this.healthyFrameMs) {
-      this.heavyFrameCounter = Math.max(0, this.heavyFrameCounter - 1);
       this.trackUpgradeHeadroom(frameMs);
       return;
     }
@@ -259,7 +263,7 @@ export class ThreeDQualityManager {
   downgrade(reason) {
     const tierIndex = this.tiers.indexOf(this.currentTier);
     if (tierIndex <= 0) {
-      this.heavyFrameCounter = 0;
+      this.heavyFrameTimestamps.length = 0;
       this.upgradeStableElapsedMs = 0;
       return;
     }
@@ -289,15 +293,30 @@ export class ThreeDQualityManager {
 
   resetTiming(timestampMs = null) {
     this.previousTimestampMs = timestampMs;
-    this.heavyFrameCounter = 0;
+    this.heavyFrameTimestamps.length = 0;
     this.upgradeStableElapsedMs = 0;
+  }
+
+  recordHeavyFrame(timestampMs) {
+    this.heavyFrameTimestamps.push(timestampMs);
+    this.pruneHeavyFrames(timestampMs);
+  }
+
+  pruneHeavyFrames(timestampMs) {
+    const cutoff = timestampMs - this.heavyFrameWindowMs;
+    while (
+      this.heavyFrameTimestamps.length > 0 &&
+      this.heavyFrameTimestamps[0] < cutoff
+    ) {
+      this.heavyFrameTimestamps.shift();
+    }
   }
 
   getDiagnostics() {
     return {
       tier: this.currentTier,
       frameMs: this.latestFrameMs,
-      heavyFrames: this.heavyFrameCounter,
+      heavyFrames: this.heavyFrameTimestamps.length,
       cooldownMs: this.cooldownRemainingMs,
       probeActive: this.mediumProbeActive,
       probeElapsedMs: this.mediumProbeElapsedMs,
