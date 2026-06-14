@@ -22,7 +22,7 @@ import Lenis from 'lenis';
       maxPixelRatio: 1.0,
       quality: 'low',
       bloomStrength: 1,
-      bloomRadius: 0.4,
+      bloomRadius: 1,
       particleScale: 1.0,
     },
     medium: {
@@ -30,7 +30,7 @@ import Lenis from 'lenis';
       maxPixelRatio: 1.25,
       quality: 'medium',
       bloomStrength: 1,
-      bloomRadius: 0.4,
+      bloomRadius: 1,
       particleScale: 1.0,
     },
     high: {
@@ -38,7 +38,7 @@ import Lenis from 'lenis';
       maxPixelRatio: 1.5,
       quality: 'high',
       bloomStrength: 1,
-      bloomRadius: 0.4,
+      bloomRadius: 1,
       particleScale: 1.0,
     },
   };
@@ -300,8 +300,7 @@ import Lenis from 'lenis';
     time += delta
 
     // scroll logic
-    const scrollHeight = Math.max(1, document.body.scrollHeight - window.innerHeight);
-    const scrollFraction = Math.max(0, Math.min(1, lenis.scroll / scrollHeight));
+    const scrollViewportUnits = lenis.scroll / Math.max(1, window.innerHeight);
     qualityManager.update(frameTimestamp);
     if (frameTimestamp - lastDiagnosticsUpdate >= 250) {
       lastDiagnosticsUpdate = frameTimestamp
@@ -315,17 +314,41 @@ import Lenis from 'lenis';
     // 1.0 -> Edge-On Rings (Dist: 4, Elev: 5°)
     const startDist = 25.0;
     const endDist = 5.1;
+    const horizonDist = 1.35;
+    const departureDist = 25.0;
     const startElev = 60.0 * Math.PI / 180;
     const endElev = 5.0 * Math.PI / 180;
+    const approachEnd = 6.0;
+    const bloomEnd = 7.5;
+    const departureEnd = 10.0;
 
-    // Use smoothstep for a softer ease-in/ease-out cinematic swoop
-    const ease = scrollFraction * scrollFraction * (3.0 - 2.0 * scrollFraction);
-    cameraConfig.distance = startDist + (endDist - startDist) * ease;
-    
-    // We only force elevation if drag is not active
-    if (!cameraConfig.enableDrag) {
-      observer.elevationAngle = startElev + (endElev - startElev) * ease;
+    const approachProgress = Math.max(0, Math.min(1, scrollViewportUnits / approachEnd));
+    const bloomProgress = Math.max(0, Math.min(1, (scrollViewportUnits - approachEnd) / (bloomEnd - approachEnd)));
+    const departureProgress = Math.max(0, Math.min(1, (scrollViewportUnits - bloomEnd) / (departureEnd - bloomEnd)));
+    const approachEase = approachProgress * approachProgress * (3.0 - 2.0 * approachProgress);
+    const bloomEase = bloomProgress * bloomProgress * (3.0 - 2.0 * bloomProgress);
+    const departureEase = departureProgress * departureProgress * (3.0 - 2.0 * departureProgress);
+
+    if (scrollViewportUnits <= approachEnd) {
+      cameraConfig.distance = startDist + (endDist - startDist) * approachEase;
+    } else if (scrollViewportUnits <= bloomEnd) {
+      cameraConfig.distance = endDist + (horizonDist - endDist) * bloomEase;
+    } else {
+      cameraConfig.distance = horizonDist + (departureDist - horizonDist) * departureEase;
     }
+
+    // Hold the low elevation through the transformed-world departure.
+    if (!cameraConfig.enableDrag) {
+      observer.elevationAngle = startElev + (endElev - startElev) * approachEase;
+    }
+
+    // Reduce bloom during approach for a clearer accretion disk, then ramp
+    // from that restrained state into the transformed-world peak.
+    const approachBloomStrength = bloomConfig.strength + (0.2 - bloomConfig.strength) * approachEase;
+    const approachBloomThreshold = bloomConfig.threshold + (0.1 - bloomConfig.threshold) * approachEase;
+    bloomPass.strength = approachBloomStrength + (3.0 - approachBloomStrength) * bloomEase;
+    bloomPass.radius = bloomConfig.radius + (1.0 - bloomConfig.radius) * bloomEase;
+    bloomPass.threshold = approachBloomThreshold + (0.0 - approachBloomThreshold) * bloomEase;
 
     const currentScrollY = lenis.scroll;
     const scrollDelta = currentScrollY - lastScrollY;
@@ -337,7 +360,11 @@ import Lenis from 'lenis';
 
     // 2. Calculate target speed (base speed + scroll momentum)
     const extraSpeed = Math.abs(scrollDelta) * 0.1; 
-    const targetOrbitSpeed = (BASE_ORBIT_SPEED + extraSpeed) * orbitDirection;
+    // Spin rapidly while crossing the near-horizon transition, then return to
+    // normal once departure reaches the original closest distance again.
+    const isInsideTransitionDistance = scrollViewportUnits > approachEnd && cameraConfig.distance <= endDist;
+    const cinematicOrbitBoost = isInsideTransitionDistance ? 10.1 : 1.0;
+    const targetOrbitSpeed = (BASE_ORBIT_SPEED + extraSpeed) * orbitDirection * cinematicOrbitBoost;
 
     // 3. Smoothly accelerate/decelerate towards target speed
     currentOrbitSpeed += (targetOrbitSpeed - currentOrbitSpeed) * 5 * delta;

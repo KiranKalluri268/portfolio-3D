@@ -81,7 +81,7 @@ export function createConfigGUI(changePerformanceQuality, changePerformancePrese
   function addBloomConfig() {
     const bloomConfig = {
       strength: 1,
-      radius: 0.4,
+      radius: 1,
       threshold: 0.6
     };
 
