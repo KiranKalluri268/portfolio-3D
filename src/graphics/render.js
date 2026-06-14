@@ -1,8 +1,6 @@
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass';
-import { CopyShader } from 'three/examples/jsm/shaders/CopyShader';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
 import { CameraDragControls } from "../camera/CameraDragControls";
 import { Observer } from "../camera/Observer";
@@ -34,11 +32,8 @@ export function createScene(renderer) {
   // strength, kernelSize, sigma, res
   // resolution, strength, radius, threshold
   const bloomPass = new UnrealBloomPass(new Vector2(128, 128), 0.8, 2.0, 0.0)
-  const shaderPass = new ShaderPass(CopyShader);
-  shaderPass.renderToScreen = true;
   composer.addPass(renderPass);
   composer.addPass(bloomPass);
-  composer.addPass(shaderPass);
 
   return {
     scene, composer, bloomPass
@@ -163,6 +158,8 @@ export function createParticleSystem() {
 
   const sceneLensed = new THREE.Scene();
   const sceneUnlensed = new THREE.Scene();
+  let targetWidth = window.innerWidth;
+  let targetHeight = window.innerHeight;
 
   // 2500 points in a flattened shell (r = 8..42) around the BH
   const COUNT = 2500;
@@ -233,6 +230,10 @@ export function createParticleSystem() {
   sceneUnlensed.add(new THREE.Points(geoB, new THREE.PointsMaterial({ ...matBase, size: 0.11 })));
 
   function resize(width, height) {
+    if (width === targetWidth && height === targetHeight) return;
+
+    targetWidth = width;
+    targetHeight = height;
     targetLensed.setSize(width, height);
     targetUnlensed.setSize(width, height);
     camera.aspect = width / height;

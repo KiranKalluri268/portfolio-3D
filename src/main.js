@@ -111,14 +111,28 @@ import Lenis from 'lenis';
   const DEFAULT_ELEVATION = 5 * Math.PI / 180 // 5° — default camera elevation above disk
 
   // Resize handler — only fires on actual window resize, not every frame
+  let renderWidth = 0
+  let renderHeight = 0
+  let renderPixelRatio = 0
+
   function applyRenderScale(
     resolution = performanceConfig.resolution,
     maxPixelRatio = PERFORMANCE_PRESETS[performanceConfig.preset]?.maxPixelRatio ?? 1.5
   ) {
     performanceConfig.resolution = resolution
     const pixelRatio = Math.min(window.devicePixelRatio * resolution, maxPixelRatio)
-    const renderWidth = Math.max(1, Math.floor(window.innerWidth * pixelRatio))
-    const renderHeight = Math.max(1, Math.floor(window.innerHeight * pixelRatio))
+    const nextRenderWidth = Math.max(1, Math.floor(window.innerWidth * pixelRatio))
+    const nextRenderHeight = Math.max(1, Math.floor(window.innerHeight * pixelRatio))
+
+    if (
+      nextRenderWidth === renderWidth &&
+      nextRenderHeight === renderHeight &&
+      pixelRatio === renderPixelRatio
+    ) return
+
+    renderWidth = nextRenderWidth
+    renderHeight = nextRenderHeight
+    renderPixelRatio = pixelRatio
 
     renderer.setPixelRatio(pixelRatio)
     renderer.setSize(window.innerWidth, window.innerHeight)
@@ -298,19 +312,21 @@ import Lenis from 'lenis';
   }
 
   function render() {
-    // 1. Render lensed 3D particles to off-screen target
-    renderer.setRenderTarget(particleTargetLensed)
-    renderer.clear()
-    renderer.render(particleSceneLensed, particleCamera)
+    const particleTarget = effectConfig.show_lensing
+      ? particleTargetLensed
+      : particleTargetUnlensed
+    const particleScene = effectConfig.show_lensing
+      ? particleSceneLensed
+      : particleSceneUnlensed
 
-    // 2. Render unlensed 3D particles to off-screen target
-    renderer.setRenderTarget(particleTargetUnlensed)
+    // Render only the particle target sampled by the current shader path.
+    renderer.setRenderTarget(particleTarget)
     renderer.clear()
-    renderer.render(particleSceneUnlensed, particleCamera)
+    renderer.render(particleScene, particleCamera)
     
     renderer.setRenderTarget(null)
 
-    // 3. Main ray-marching + bloom
+    // Main ray-marching + bloom.
     composer.render()
   }
 
