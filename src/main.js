@@ -4,6 +4,7 @@ import { createCamera, createRenderer, createScene, createShaderProjectionPlane,
 import { createStatsGUI } from './gui/statsGUI';
 import { createConfigGUI } from './gui/datGUI';
 import { ThreeDQualityManager } from './performance/ThreeDQualityManager';
+import { createStoryOverlay } from './story/StoryOverlay';
 import Lenis from 'lenis';
 
 
@@ -15,6 +16,8 @@ import Lenis from 'lenis';
   let loadingTargetProgress = 0
   let loadingDisplayedProgress = 0
   let loadingReadyToDismiss = false
+  let entryGateArmed = false
+  const storyOverlay = createStoryOverlay()
   document.documentElement.classList.add('is-loading')
   window.scrollTo(0, 0)
 
@@ -27,15 +30,33 @@ import Lenis from 'lenis';
     loadingDisplayedProgress += (loadingTargetProgress - loadingDisplayedProgress) * 0.08
     if (loadingTargetProgress >= 100 && loadingDisplayedProgress > 99.5) loadingDisplayedProgress = 100
     if (loadingPercentage) loadingPercentage.textContent = `${Math.floor(loadingDisplayedProgress)}%`
-    if (loadingReadyToDismiss && loadingDisplayedProgress === 100 && !loadingOverlayDismissed) {
-      loadingOverlayDismissed = true
-      document.documentElement.classList.remove('is-loading')
-      lenis.start()
-      if (loadingOverlay) {
-        loadingOverlay.classList.add('loaded')
-        loadingOverlay.addEventListener('transitionend', () => loadingOverlay.remove(), { once: true })
-      }
+    if (loadingReadyToDismiss && loadingDisplayedProgress === 100 && !entryGateArmed) {
+      armEntryGate()
     }
+  }
+
+  function armEntryGate() {
+    entryGateArmed = true
+    if (loadingStatus) loadingStatus.textContent = 'Click anywhere to enter the spaceship'
+    loadingOverlay?.classList.add('ready-to-enter')
+    loadingOverlay?.addEventListener('click', enterSite)
+    window.addEventListener('keydown', handleEntryKeydown)
+  }
+
+  function handleEntryKeydown(event) {
+    if (event.key === 'Enter') enterSite()
+  }
+
+  function enterSite() {
+    if (!entryGateArmed || loadingOverlayDismissed) return
+
+    loadingOverlayDismissed = true
+    loadingOverlay?.removeEventListener('click', enterSite)
+    window.removeEventListener('keydown', handleEntryKeydown)
+    document.documentElement.classList.remove('is-loading')
+    lenis.start()
+    loadingOverlay?.classList.add('loaded')
+    loadingOverlay?.addEventListener('transitionend', () => loadingOverlay.remove(), { once: true })
   }
 
   setLoadingStage('Initializing renderer...', 3)
@@ -369,6 +390,7 @@ import Lenis from 'lenis';
 
     // scroll logic
     const scrollViewportUnits = lenis.scroll / Math.max(1, window.innerHeight);
+    storyOverlay.update(scrollViewportUnits)
     if (benchmarkStarted) qualityManager.update(frameTimestamp);
     if (frameTimestamp - lastDiagnosticsUpdate >= 250) {
       lastDiagnosticsUpdate = frameTimestamp
@@ -526,9 +548,12 @@ import Lenis from 'lenis';
     window.removeEventListener('resize', handleResize);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     window.removeEventListener('beforeunload', disposeApp);
+    loadingOverlay?.removeEventListener('click', enterSite);
+    window.removeEventListener('keydown', handleEntryKeydown);
     lenis.destroy();
     cameraControl.dispose();
     disposeGUI();
+    storyOverlay.dispose();
     disposeParticleSystem();
     disposeShaderPlane();
     disposeScene();

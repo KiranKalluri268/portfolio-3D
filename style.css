@@ -37,6 +37,20 @@ canvas {
   pointer-events: none;
 }
 
+#loading-overlay.ready-to-enter {
+  cursor: pointer;
+}
+
+#loading-overlay.ready-to-enter #loading-status {
+  color: #fff5e0;
+  animation: entry-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes entry-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
 .loading-ring {
   position: absolute;
   inset: 0;
@@ -69,6 +83,22 @@ canvas {
   50%       { opacity: 0.4; }
 }
 
+.loading-headline {
+  max-width: min(900px, 90vw);
+  margin: 0 0 42px;
+  color: #e52b2b;
+  font-family: Arial, sans-serif;
+  font-size: clamp(34px, 6vw, 84px);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: 0;
+  text-align: center;
+}
+
+.story-accent {
+  color: #e52b2b;
+}
+
 .loading-visual {
   position: relative;
   width: 124px;
@@ -93,4 +123,35 @@ canvas {
   margin-top: 8px;
   color: rgba(255, 245, 224, 0.72);
   font-size: 13px;
+}
+
+#story-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.story-scene {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+.story-scene h2 {
+  max-width: min(1000px, 92vw);
+  margin: 0;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  font-size: clamp(32px, 6vw, 82px);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: 0;
+  text-align: center;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.65);
 }

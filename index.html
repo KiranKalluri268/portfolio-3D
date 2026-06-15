@@ -14,6 +14,7 @@
 
     <!-- Loading overlay — dismissed by main.js once all textures are ready -->
     <div id="loading-overlay">
+      <h1 class="loading-headline">YOU ARE NOT READY FOR THIS</h1>
       <div class="loading-visual" aria-hidden="true">
         <div class="loading-ring outer"></div>
         <div class="loading-ring inner"></div>
@@ -22,6 +23,12 @@
         <div id="loading-percentage">0%</div>
         <div id="loading-status">Initializing renderer...</div>
       </div>
+    </div>
+
+    <div id="story-overlay" aria-live="polite">
+      <section class="story-scene horizon-message" data-story-scene="horizonMessage" aria-hidden="true">
+        <h2>YOU ARE <span class="story-accent">STILL</span> <span class="story-accent">NOT READY</span> FOR THIS</h2>
+      </section>
     </div>
 
     <script type="x-shader/x-vertex" id="vertexShader">  
