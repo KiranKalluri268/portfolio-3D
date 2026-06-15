@@ -39,11 +39,23 @@ canvas {
 
 #loading-overlay.ready-to-enter {
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #loading-overlay.ready-to-enter #loading-status {
   color: #fff5e0;
   animation: entry-pulse 1.6s ease-in-out infinite;
+}
+
+#loading-overlay.holding-entry #loading-status {
+  animation: none;
+  opacity: 1;
+}
+
+#loading-overlay.holding-entry .loading-ring.outer {
+  animation-duration: 0.55s;
+  box-shadow: 0 0 30px rgba(232, 160, 72, 0.75);
 }
 
 @keyframes entry-pulse {

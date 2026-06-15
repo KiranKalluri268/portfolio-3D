@@ -17,6 +17,8 @@ import Lenis from 'lenis';
   let loadingDisplayedProgress = 0
   let loadingReadyToDismiss = false
   let entryGateArmed = false
+  let entryHoldTimer = null
+  const ENTRY_HOLD_DURATION_MS = 900
   const storyOverlay = createStoryOverlay()
   document.documentElement.classList.add('is-loading')
   window.scrollTo(0, 0)
@@ -37,10 +39,32 @@ import Lenis from 'lenis';
 
   function armEntryGate() {
     entryGateArmed = true
-    if (loadingStatus) loadingStatus.textContent = 'Click anywhere to enter the spaceship'
+    const usesTouch = window.matchMedia('(pointer: coarse)').matches
+    if (loadingStatus) {
+      loadingStatus.textContent = usesTouch
+        ? 'Touch and hold to enter the spaceship'
+        : 'Click and hold to enter the spaceship'
+    }
     loadingOverlay?.classList.add('ready-to-enter')
-    loadingOverlay?.addEventListener('click', enterSite)
+    loadingOverlay?.addEventListener('pointerdown', startEntryHold)
+    loadingOverlay?.addEventListener('pointerup', cancelEntryHold)
+    loadingOverlay?.addEventListener('pointercancel', cancelEntryHold)
+    loadingOverlay?.addEventListener('pointerleave', cancelEntryHold)
     window.addEventListener('keydown', handleEntryKeydown)
+  }
+
+  function startEntryHold(event) {
+    if (!entryGateArmed || loadingOverlayDismissed || entryHoldTimer) return
+    event.preventDefault()
+    loadingOverlay?.setPointerCapture?.(event.pointerId)
+    loadingOverlay?.classList.add('holding-entry')
+    entryHoldTimer = window.setTimeout(enterSite, ENTRY_HOLD_DURATION_MS)
+  }
+
+  function cancelEntryHold() {
+    if (entryHoldTimer) window.clearTimeout(entryHoldTimer)
+    entryHoldTimer = null
+    loadingOverlay?.classList.remove('holding-entry')
   }
 
   function handleEntryKeydown(event) {
@@ -50,8 +74,12 @@ import Lenis from 'lenis';
   function enterSite() {
     if (!entryGateArmed || loadingOverlayDismissed) return
 
+    cancelEntryHold()
     loadingOverlayDismissed = true
-    loadingOverlay?.removeEventListener('click', enterSite)
+    loadingOverlay?.removeEventListener('pointerdown', startEntryHold)
+    loadingOverlay?.removeEventListener('pointerup', cancelEntryHold)
+    loadingOverlay?.removeEventListener('pointercancel', cancelEntryHold)
+    loadingOverlay?.removeEventListener('pointerleave', cancelEntryHold)
     window.removeEventListener('keydown', handleEntryKeydown)
     document.documentElement.classList.remove('is-loading')
     lenis.start()
@@ -548,7 +576,11 @@ import Lenis from 'lenis';
     window.removeEventListener('resize', handleResize);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     window.removeEventListener('beforeunload', disposeApp);
-    loadingOverlay?.removeEventListener('click', enterSite);
+    cancelEntryHold();
+    loadingOverlay?.removeEventListener('pointerdown', startEntryHold);
+    loadingOverlay?.removeEventListener('pointerup', cancelEntryHold);
+    loadingOverlay?.removeEventListener('pointercancel', cancelEntryHold);
+    loadingOverlay?.removeEventListener('pointerleave', cancelEntryHold);
     window.removeEventListener('keydown', handleEntryKeydown);
     lenis.destroy();
     cameraControl.dispose();

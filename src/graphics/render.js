@@ -6,8 +6,8 @@ import { CameraDragControls } from "../camera/CameraDragControls";
 import { Observer } from "../camera/Observer";
 import { Vector2 } from 'three/src/math/Vector2';
 import fragmentShader from './fragmentShader.glsl?raw';
-import starUrl from '../../assets/star_noise.png';
-import milkywayUrl from '../../assets/milkyway.jpg';
+import starUrl from '../../assets/star_noise-generated.png';
+import milkywayUrl from '../../assets/milkyway-preview.jpg';
 import diskUrl from '../../assets/accretion_disk.png';
 
 export function createRenderer() {
