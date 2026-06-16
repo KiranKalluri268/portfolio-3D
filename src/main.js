@@ -433,13 +433,13 @@ import Lenis from 'lenis';
     // 1.0 -> Edge-On Rings (Dist: 4, Elev: 5°)
     const startDist = 25.0;
     const endDist = 5.1;
-    const horizonDist = 1.35;
-    const departureDist = 25.0;
+    const horizonDist = 1.8;
+    const departureDist = 40.0;
     const startElev = 60.0 * Math.PI / 180;
     const endElev = 5.0 * Math.PI / 180;
     const approachEnd = 6.0;
     const bloomEnd = 7.5;
-    const departureEnd = 10.0;
+    const departureEnd = 18.0;
 
     const approachProgress = Math.max(0, Math.min(1, scrollViewportUnits / approachEnd));
     const bloomProgress = Math.max(0, Math.min(1, (scrollViewportUnits - approachEnd) / (bloomEnd - approachEnd)));
@@ -447,6 +447,11 @@ import Lenis from 'lenis';
     const approachEase = approachProgress * approachProgress * (3.0 - 2.0 * approachProgress);
     const bloomEase = bloomProgress * bloomProgress * (3.0 - 2.0 * bloomProgress);
     const departureEase = departureProgress * departureProgress * (3.0 - 2.0 * departureProgress);
+    const entryRotationProgress = Math.max(0, Math.min(1, (bloomProgress - 0.9) / 0.1));
+    const entryRotationEase = entryRotationProgress * entryRotationProgress * (3.0 - 2.0 * entryRotationProgress);
+    const exitReorientationProgress = Math.max(0, Math.min(1, departureProgress / 0.66));
+    const exitReorientationEase = exitReorientationProgress * exitReorientationProgress * (3.0 - 2.0 * exitReorientationProgress);
+    const exitArc = Math.PI * 0.12 * departureEase;
 
     sourceLicenseLinks?.classList.toggle('visible', scrollViewportUnits >= departureEnd - 0.15)
 
@@ -484,7 +489,8 @@ import Lenis from 'lenis';
     // Spin rapidly while crossing the near-horizon transition, then return to
     // normal once departure reaches the original closest distance again.
     const isInsideTransitionDistance = scrollViewportUnits > approachEnd && cameraConfig.distance <= endDist;
-    const cinematicOrbitBoost = isInsideTransitionDistance ? 10.1 : 1.0;
+    const isHorizonViewFlipping = entryRotationProgress > 0 && departureProgress <= 0;
+    const cinematicOrbitBoost = isInsideTransitionDistance && !isHorizonViewFlipping ? 10.1 : 1.0;
     const targetOrbitSpeed = (BASE_ORBIT_SPEED + extraSpeed) * orbitDirection * cinematicOrbitBoost;
 
     // 3. Smoothly accelerate/decelerate towards target speed
@@ -497,8 +503,11 @@ import Lenis from 'lenis';
     stats.update()
 
     // update renderer
+    observer.distance = cameraConfig.distance
     observer.update(delta)
     cameraControl.update(delta)
+    applyExitTrajectory(exitArc, departureProgress)
+    applyExitViewDirection(entryRotationEase, departureProgress, exitReorientationEase)
 
     // slowly revolve particles around the BH when toggle is on
     if (cameraConfig.particleOrbit) {
@@ -560,8 +569,25 @@ import Lenis from 'lenis';
     particleCamera.lookAt(0, 0, 0)
     particleCamera.updateMatrixWorld()
 
+  }
 
-    observer.distance = cameraConfig.distance
+  function applyExitTrajectory(exitArc, departureProgress) {
+    if (cameraConfig.enableDrag || departureProgress <= 0) return;
+
+    observer.position.applyAxisAngle(observer.up, exitArc);
+    observer.velocity.applyAxisAngle(observer.up, exitArc);
+    observer.direction.copy(observer.position).negate().normalize();
+  }
+
+  function applyExitViewDirection(bloomEase, departureProgress, exitReorientationEase) {
+    if (cameraConfig.enableDrag) return;
+
+    const entryFlip = Math.PI * bloomEase;
+    const departureFlip = Math.PI * (1.0 - exitReorientationEase);
+    const yawOffset = departureProgress > 0 ? departureFlip : entryFlip;
+    if (yawOffset <= 0.0001) return;
+
+    observer.direction.applyAxisAngle(observer.up, yawOffset).normalize();
   }
 
   function dismissLoadingOverlayIfReady() {

@@ -1,9 +1,9 @@
 export const STORY_SCENES = {
   horizonMessage: {
-    fadeInStart: 6.85,
-    holdStart: 7.05,
-    holdEnd: 7.6,
-    fadeOutEnd: 7.85,
+    fadeInStart: 7.05,
+    holdStart: 7.15,
+    holdEnd: 7.3,
+    fadeOutEnd: 7.4,
   },
 };
 
