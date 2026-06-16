@@ -13,6 +13,7 @@ import Lenis from 'lenis';
   const loadingOverlay = document.getElementById('loading-overlay')
   const loadingPercentage = document.getElementById('loading-percentage')
   const loadingStatus = document.getElementById('loading-status')
+  const sourceLicenseLinks = document.getElementById('source-license-links')
   let loadingTargetProgress = 0
   let loadingDisplayedProgress = 0
   let loadingReadyToDismiss = false
@@ -446,6 +447,8 @@ import Lenis from 'lenis';
     const approachEase = approachProgress * approachProgress * (3.0 - 2.0 * approachProgress);
     const bloomEase = bloomProgress * bloomProgress * (3.0 - 2.0 * bloomProgress);
     const departureEase = departureProgress * departureProgress * (3.0 - 2.0 * departureProgress);
+
+    sourceLicenseLinks?.classList.toggle('visible', scrollViewportUnits >= departureEnd - 0.15)
 
     if (scrollViewportUnits <= approachEnd) {
       cameraConfig.distance = startDist + (endDist - startDist) * approachEase;
