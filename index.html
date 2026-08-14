@@ -6,7 +6,8 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Kiran's interactive 3D web portfolio featuring a cinematic black hole simulation.">
-    
+    <link rel="icon" href="/favicon.ico" sizes="any">
+
     <!-- import the webpage's stylesheet -->
     <link rel="stylesheet" href="/style.css">
   </head>  
@@ -24,6 +25,11 @@
         <div id="loading-status">Initializing renderer...</div>
       </div>
     </div>
+
+    <!-- Covers the swap between the raymarched scene and the tunnel: black on
+         the way in, white on the way out. Driven from main.js. -->
+    <div id="transition-veil" aria-hidden="true"></div>
+    <div id="cockpit-vignette" aria-hidden="true"></div>
 
     <div id="story-overlay" aria-live="polite">
       <section class="story-scene horizon-message" data-story-scene="horizonMessage" aria-hidden="true">

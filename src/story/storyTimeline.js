@@ -1,9 +1,12 @@
+// Scroll positions are viewport units and line up with JOURNEY in src/main.js.
+// The horizon message rides the blackout: it arrives as the frame goes dark at
+// 7.5 and is gone before the passage is revealed at ~8.2.
 export const STORY_SCENES = {
   horizonMessage: {
-    fadeInStart: 7.05,
-    holdStart: 7.15,
-    holdEnd: 7.3,
-    fadeOutEnd: 7.4,
+    fadeInStart: 7.30,
+    holdStart: 7.50,
+    holdEnd: 7.90,
+    fadeOutEnd: 8.05,
   },
 };
 

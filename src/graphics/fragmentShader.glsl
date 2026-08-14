@@ -18,6 +18,12 @@ uniform vec3 cam_vel;
 const float MIN_TEMPERATURE = 1000.0;
 const float TEMPERATURE_RANGE = 39000.0;
 
+// How far left of centre the rays are aimed, in half-screens, so the object being
+// orbited sits at 3/4 width instead of in the middle. src/graphics/planet.js
+// mirrors this when it aims the planet at a screen position, and must be changed
+// with it.
+const float COMPOSE_SHIFT = 0.5;
+
 uniform bool accretion_disk;
 uniform bool use_disk_texture;
 const float DISK_IN = 2.0;
@@ -32,7 +38,35 @@ uniform sampler2D star_texture;
 uniform sampler2D disk_texture;
 uniform sampler2D particle_texture; // Lensed stars (small)
 uniform sampler2D particle_texture_unlensed; // Unlensed stars (large foreground)
+uniform sampler2D planet_texture;
+uniform float planet_amount;        // 0 outside the new world, and the target is not even drawn
+uniform mat4 planet_view_projection;
+uniform float planet_range;         // how far along the ray the planet sits
 uniform bool show_lensing;
+
+// ── World appearance ────────────────────────────────────────────────────────
+// The same geodesic renders both worlds. Only what the horizon and the sky are
+// made of changes, so the lensing that sells the black hole also sells the
+// wormhole. At the defaults below this block is a no-op and the output is
+// identical to the untinted black hole.
+uniform float throat_throughput; // 0.0 = black hole absorbs, 1.0 = wormhole transmits
+uniform vec3 disk_tint;
+uniform vec3 bg_tint;            // multiplies stars and the nebula plate
+uniform vec3 space_color_plane;  // deep space toward the galactic plane
+uniform vec3 space_color_pole;   // deep space away from it
+
+// The sky on the far side of the throat. Its own rotation and colours, because a
+// wormhole that opened onto the same sky it sits in would not read as a way out.
+// The gains are not decoration: sampled at the background's own brightness the
+// throat is barely distinguishable from the sky around it and disappears entirely
+// once the camera has pulled back.
+uniform float throat_sky_rotation;
+uniform vec3 throat_color_plane;
+uniform vec3 throat_color_pole;
+uniform float throat_star_gain;
+uniform float throat_nebula_gain;
+uniform vec3 throat_rim_color;
+uniform float throat_rim_gain;
 
 
 
@@ -106,6 +140,31 @@ vec3 temp_to_color(float temp_kelvin){
 }
 
 
+// One sky, sampled twice: once for the background along the unbent ray, and once
+// through the wormhole throat along the bent one. Keeping it in a single place is
+// what stops the two skies drifting apart as either is tuned.
+//   rotation      degrees about Z, so the far side is a different patch of sky
+//   doppler_factor pass 1.0 to leave the star temperatures alone
+vec3 sample_sky(vec3 dir, float rotation, vec3 tint, vec3 plane_color, vec3 pole_color,
+                float star_gain, float nebula_gain, float doppler_factor){
+  vec2 tex_coord = to_spherical(dir * ROT_Z(rotation * DEG_TO_RAD));
+  vec3 sky = vec3(0.0);
+
+  vec4 star_color = texture2D(star_texture, tex_coord);
+  if (star_color.g > 0.0){
+    float star_temperature = (MIN_TEMPERATURE + TEMPERATURE_RANGE*star_color.r);
+    float star_velocity = star_color.b - 0.5;
+    float star_doppler_factor = sqrt((1.0+star_velocity)/(1.0-star_velocity));
+    if (doppler_shift)
+      star_temperature /= doppler_factor*star_doppler_factor;
+    sky += temp_to_color(star_temperature) * tint * star_color.g * star_gain;
+  }
+
+  sky += mix(plane_color, pole_color, smoothstep(0.0, 0.55, abs(dir.y)));
+  sky += texture2D(bg_texture, tex_coord).rgb * nebula_gain * tint;
+  return sky;
+}
+
 // https://gist.github.com/fieldOfView/5106319
 // https://gamedev.stackexchange.com/questions/93032/what-causes-this-distortion-in-my-perspective-projection-at-steep-view-angles
 // for reference
@@ -119,8 +178,10 @@ void main()	{
   vec2 uv = square_frame(resolution);
 
   // Off-center projection: shift black hole to 3/4 horizontal position.
-  // uv.x is in [-1, +1]; subtracting 0.5 moves the "center" (black hole) to x=0.5 (75% from left).
-  uv.x -= 0.5;
+  // uv.x is in [-1, +1]; subtracting COMPOSE_SHIFT moves the "center" (black hole)
+  // to x=0.5 (75% from left). Anything rendered to an offscreen target and sampled
+  // back by ray direction has to know about this shift — see the planet block.
+  uv.x -= COMPOSE_SHIFT;
 
   uv *= vec2(resolution.x/resolution.y, 1.0);
   vec3 forward = normalize(cam_dir); // 
@@ -185,8 +246,26 @@ void main()	{
     bool horizon_mask = distSq < 1.0 && dot(oldpoint, oldpoint) > 1.0;// intersecting eventhorizon
     // does it enter event horizon?
     if (horizon_mask) {
-      vec4 black = vec4(0.0,0.0,0.0,1.0);
-      color += black;
+      // A black hole absorbs the ray. A wormhole is a hole — it hands back what
+      // is on the other side. Either way the ray terminates here, so everything
+      // outside still bends around the same mass and the lensing is untouched.
+      //
+      // velocity at the crossing is the fully bent direction, so the far sky
+      // arrives already swirled toward the rim: the crystal-ball distortion is
+      // the integrator's doing, not an effect layered on top. No doppler — the
+      // far side is not moving with respect to anything here.
+      vec3 through = normalize(velocity);
+      vec3 far_side = sample_sky(through, throat_sky_rotation, vec3(1.0),
+                                 throat_color_plane, throat_color_pole,
+                                 throat_star_gain, throat_nebula_gain, 1.0);
+
+      // Rays crossing tangentially graze the throat and light its edge; rays
+      // crossing head-on do not. That is what gives it a boundary instead of
+      // letting it read as a patch of brighter sky.
+      float rim = 1.0 - abs(dot(through, normalize(point)));
+      far_side += throat_rim_color * pow(rim, 3.0) * throat_rim_gain;
+
+      color += vec4(far_side * throat_throughput, 1.0);
       break;
     }
     
@@ -217,7 +296,7 @@ void main()	{
               disk_alpha /= (ddf * ddf * ddf);
             }
             
-            color += vec4(disk_color)*disk_alpha;
+            color += vec4(disk_color.rgb * disk_tint, disk_color.a)*disk_alpha;
           } else {
           
           // use blackbody 
@@ -227,7 +306,7 @@ void main()	{
           if (doppler_shift)
             disk_temperature /= ray_doppler_factor*disk_doppler_factor;
 
-          vec3 disk_color = temp_to_color(disk_temperature);
+          vec3 disk_color = temp_to_color(disk_temperature) * disk_tint;
           float disk_alpha = clamp(dot(disk_color,disk_color)/3.0,0.0,1.0);
           
           if (beaming) {
@@ -247,26 +326,9 @@ void main()	{
   if (distance > 1.0){
 
     // ── Background: ALWAYS straight ray, never affected by lensing toggle ──
-    vec2 tex_coord = to_spherical(orig_ray_dir * ROT_Z(45.0 * DEG_TO_RAD));
-
-    vec4 star_color = texture2D(star_texture, tex_coord);
-    if (star_color.g > 0.0){
-      float star_temperature = (MIN_TEMPERATURE + TEMPERATURE_RANGE*star_color.r);
-      float star_velocity = star_color.b - 0.5;
-      float star_doppler_factor = sqrt((1.0+star_velocity)/(1.0-star_velocity));
-      if (doppler_shift)
-        star_temperature /= ray_doppler_factor*star_doppler_factor;
-      color += vec4(temp_to_color(star_temperature), 1.0) * star_color.g;
-    }
-
-    float nebula_elev = abs(orig_ray_dir.y);
-    vec3 base_space = mix(
-      vec3(0.01, 0.013, 0.03),
-      vec3(0.0,  0.0,   0.006),
-      smoothstep(0.0, 0.55, nebula_elev)
-    );
-    color += vec4(base_space, 1.0);
-    color += texture2D(bg_texture, tex_coord) * 0.2;
+    color += vec4(sample_sky(orig_ray_dir, 45.0, bg_tint,
+                             space_color_plane, space_color_pole,
+                             1.0, 0.2, ray_doppler_factor), 1.0);
 
     // ── Screen-space lensed particles (Option B) ──────────────────────────
     // Project the bent ray direction onto the camera frustum to get screen UV,
@@ -295,6 +357,40 @@ void main()	{
       vec2 p_uv_unlensed = vec2(orig_px / aspect * 0.5 + 0.5, orig_py * 0.5 + 0.5);
       if (p_uv_unlensed.x > 0.0 && p_uv_unlensed.x < 1.0 && p_uv_unlensed.y > 0.0 && p_uv_unlensed.y < 1.0) {
         color += texture2D(particle_texture_unlensed, p_uv_unlensed);
+      }
+    }
+
+    // ── The planet ────────────────────────────────────────────────────────
+    // Composited alpha-over, not added: a planet has a night side, and adding it
+    // would leave that side transparent with the sky showing through. This whole
+    // block sits inside "distance > 1.0", so rays that ended at the throat never
+    // reach it — the throat occludes the planet with no depth work.
+    //
+    // Sampled along the straight ray, like the unlensed star layer above and for
+    // the same reason. Sampling along the bent one is more nearly correct and does
+    // produce a second, lensed image of the planet hugging the throat — but that
+    // image reads as a detached sliver rather than as physics, and the bending
+    // visibly warps the planet itself. Both are worst in portrait, where the
+    // throat takes up much more of the frame.
+    // Located by projecting through the planet camera's own matrix rather than by
+    // reconstructing screen coordinates from the ray. The particle layers do the
+    // latter, and it ties them to this shader's exact framing — the half-screen
+    // COMPOSE_SHIFT included, which is why they sample nothing on the left quarter
+    // of the screen. Stars survive that; a planet would be sliced down a hard
+    // vertical edge. Going through the matrix also lets the planet have its own
+    // narrow lens, which is what keeps it round.
+    //
+    // The ray is turned into a point at the planet's own range before projecting.
+    // Only the planet is drawn into that target, so it is the only thing this can
+    // resolve, and at its range the mapping is exact.
+    if (planet_amount > 0.0) {
+      vec4 planet_clip = planet_view_projection * vec4(cam_pos + orig_ray_dir * planet_range, 1.0);
+      if (planet_clip.w > 0.0) {
+        vec2 pl_uv = (planet_clip.xy / planet_clip.w) * 0.5 + 0.5;
+        if (pl_uv.x > 0.0 && pl_uv.x < 1.0 && pl_uv.y > 0.0 && pl_uv.y < 1.0) {
+          vec4 planet = texture2D(planet_texture, pl_uv);
+          color.rgb = mix(color.rgb, planet.rgb, planet.a * planet_amount);
+        }
       }
     }
   }

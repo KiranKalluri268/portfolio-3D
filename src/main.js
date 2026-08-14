@@ -5,6 +5,8 @@ import { createStatsGUI } from './gui/statsGUI';
 import { createConfigGUI } from './gui/datGUI';
 import { ThreeDQualityManager } from './performance/ThreeDQualityManager';
 import { createStoryOverlay } from './story/StoryOverlay';
+import { createTunnel } from './graphics/tunnel';
+import { createPlanet } from './graphics/planet';
 import Lenis from 'lenis';
 
 
@@ -14,6 +16,8 @@ import Lenis from 'lenis';
   const loadingPercentage = document.getElementById('loading-percentage')
   const loadingStatus = document.getElementById('loading-status')
   const sourceLicenseLinks = document.getElementById('source-license-links')
+  const transitionVeil = document.getElementById('transition-veil')
+  const cockpitVignette = document.getElementById('cockpit-vignette')
   let loadingTargetProgress = 0
   let loadingDisplayedProgress = 0
   let loadingReadyToDismiss = false
@@ -29,8 +33,13 @@ import Lenis from 'lenis';
     if (loadingStatus) loadingStatus.textContent = message
   }
 
-  function updateLoadingProgress() {
-    loadingDisplayedProgress += (loadingTargetProgress - loadingDisplayedProgress) * 0.08
+  function updateLoadingProgress(frameDeltaSeconds) {
+    // Frame-rate independent easing. A fixed 0.08-per-frame lerp is ~0.2s at
+    // 60fps but crawls to nearly a minute at 1fps — on exactly the slow devices
+    // where everything is already loaded and the visitor is staring at 89%.
+    // This reproduces the 60fps feel at any frame rate.
+    const smoothing = 1 - Math.pow(1 - 0.08, Math.min(frameDeltaSeconds, 0.5) * 60)
+    loadingDisplayedProgress += (loadingTargetProgress - loadingDisplayedProgress) * smoothing
     if (loadingTargetProgress >= 100 && loadingDisplayedProgress > 99.5) loadingDisplayedProgress = 100
     if (loadingPercentage) loadingPercentage.textContent = `${Math.floor(loadingDisplayedProgress)}%`
     if (loadingReadyToDismiss && loadingDisplayedProgress === 100 && !entryGateArmed) {
@@ -149,12 +158,72 @@ import Lenis from 'lenis';
     disk_texture: { type: "t", value: null },
     particle_texture: { type: "t", value: null },
     particle_texture_unlensed: { type: "t", value: null },
-    show_lensing: { type: "b", value: true }
+    planet_texture: { type: "t", value: null },
+    planet_amount: { type: "f", value: 0.0 },
+    planet_view_projection: { type: "m4", value: new THREE.Matrix4() },
+    planet_range: { type: "f", value: 0.0 },
+    show_lensing: { type: "b", value: true },
+    // Defaults reproduce the black hole exactly — the values below are the
+    // constants they replaced in the shader. The journey drives them.
+    // throat_throughput at 0 collapses the horizon branch back to black, so the
+    // whole approach is untouched however the rest of these are tuned.
+    throat_throughput: { type: "f", value: 0.0 },
+    disk_tint: { type: "v3", value: new THREE.Vector3(1.0, 1.0, 1.0) },
+    bg_tint: { type: "v3", value: new THREE.Vector3(1.0, 1.0, 1.0) },
+    space_color_plane: { type: "v3", value: new THREE.Vector3(0.01, 0.013, 0.03) },
+    space_color_pole: { type: "v3", value: new THREE.Vector3(0.0, 0.0, 0.006) },
+    // The far side. Rotated well away from the background's own 45° so the star
+    // pattern through the throat is visibly not the star pattern around it.
+    throat_sky_rotation: { type: "f", value: 160.0 },
+    throat_color_plane: { type: "v3", value: new THREE.Vector3(0.16, 0.11, 0.26) },
+    throat_color_pole: { type: "v3", value: new THREE.Vector3(0.05, 0.03, 0.12) },
+    throat_star_gain: { type: "f", value: 4.0 },
+    throat_nebula_gain: { type: "f", value: 1.1 },
+    throat_rim_color: { type: "v3", value: new THREE.Vector3(0.75, 0.85, 1.0) },
+    throat_rim_gain: { type: "f", value: 1.2 },
+  }
+
+  // The world we emerge into: warm sky, and no accretion disk. The disk is the
+  // black hole's tell — the dark gap between the horizon at r=1 and the disk's
+  // inner edge at r=2 is the silhouette itself — so the new world does without
+  // one, the way a wormhole does. diskTint still matters on the way through:
+  // the disk is on screen until emergence starts.
+  const NEW_WORLD = {
+    throatThroughput: 1.0,
+    diskTint: new THREE.Vector3(0.62, 0.86, 1.0),
+    bgTint: new THREE.Vector3(1.0, 0.82, 0.72),
+    spaceColorPlane: new THREE.Vector3(0.045, 0.022, 0.028),
+    spaceColorPole: new THREE.Vector3(0.012, 0.004, 0.008),
+  }
+  // Captured before anything drives them, so the return trip is exact.
+  const OLD_WORLD = {
+    diskTint: uniforms.disk_tint.value.clone(),
+    bgTint: uniforms.bg_tint.value.clone(),
+    spaceColorPlane: uniforms.space_color_plane.value.clone(),
+    spaceColorPole: uniforms.space_color_pole.value.clone(),
+  }
+
+  // Phase boundaries, in viewport units of scroll. body height in style.css has
+  // to cover departureEnd with room to spare.
+  const JOURNEY = {
+    approachEnd: 6.0,
+    blackoutEnd: 7.5,
+    tunnelEnd: 12.5,
+    emergenceEnd: 14.0,
+    departureEnd: 20.0,
+  }
+
+  function clamp01(value) {
+    return Math.max(0, Math.min(1, value))
+  }
+
+  function smoothstep(t) {
+    return t * t * (3.0 - 2.0 * t)
   }
 
   // create scene, 3d context, etc.. instances
   const renderer = createRenderer()
-  const { composer, bloomPass, scene, disposeScene } = createScene(renderer);
+  const { composer, bloomPass, scene, camera, renderPass, disposeScene } = createScene(renderer);
   document.body.appendChild(renderer.domElement)
   setLoadingStage('Loading assets...', 10)
 
@@ -185,6 +254,22 @@ import Lenis from 'lenis';
   } = createParticleSystem();
   uniforms.particle_texture.value = particleTargetLensed.texture;
   uniforms.particle_texture_unlensed.value = particleTargetUnlensed.texture;
+
+  // The passage between the two worlds. Rendered through the same composer, so
+  // it inherits bloom without a second post-processing chain.
+  const { tunnelScene, tunnelCamera, updateTunnel, resizeTunnel, disposeTunnel } =
+    createTunnel(window.innerWidth / window.innerHeight);
+  let tunnelActive = false;
+
+  // Somewhere to arrive. Rendered to its own target and sampled by the shader —
+  // see src/graphics/planet.js for why it does not share the particle ones.
+  const {
+    planetScene, planetTarget, planetCamera, planetViewProjection, planetRange,
+    updatePlanet, resizePlanetTarget, disposePlanet
+  } = createPlanet(window.innerWidth, window.innerHeight);
+  uniforms.planet_texture.value = planetTarget.texture;
+  uniforms.planet_view_projection.value = planetViewProjection;
+  uniforms.planet_range.value = planetRange;
   ready.then(() => {
     uniforms.bg_texture.value = textures.get('bg1')
     uniforms.star_texture.value = textures.get('star')
@@ -241,6 +326,8 @@ import Lenis from 'lenis';
     composer.setPixelRatio(pixelRatio)
     composer.setSize(window.innerWidth, window.innerHeight)
     resizeParticleTargets(renderWidth, renderHeight)
+    resizePlanetTarget(renderWidth, renderHeight)
+    resizeTunnel(window.innerWidth / window.innerHeight)
     uniforms.resolution.value.set(renderWidth, renderHeight)
   }
 
@@ -318,6 +405,7 @@ import Lenis from 'lenis';
     heavyFrameMs: 20,
     panicFrameMs: 50,
     maxFrameGapMs: 250,
+    benchmarkDeadlineMs: 15000,
     heavyFrameLimit: 5,
     heavyFrameWindowMs: 1500,
     cooldownMs: 7000,
@@ -342,13 +430,16 @@ import Lenis from 'lenis';
       }
       applyPerformancePreset(newTier, false);
     },
-    onWarmupComplete: ({ tier, heavyFrames, panicFrames }) => {
+    onWarmupComplete: ({ tier, heavyFrames, panicFrames, reason }) => {
       console.log(
         "Quality Manager: Warmup complete at " + tier +
-        " (" + heavyFrames + " heavy frames, " + panicFrames + " panic frames)"
+        " (" + heavyFrames + " heavy frames, " + panicFrames + " panic frames, " + reason + ")"
       );
       setTimeout(() => {
-        if (qualityManager.currentTier === 'low' && panicFrames === 0) {
+        // A benchmark that ran out of wall-clock never sampled a usable frame,
+        // so its zeroed counters are not evidence of spare capacity. Settle at
+        // the safe tier and let the visitor in rather than probing upward.
+        if (reason !== 'benchmark-deadline' && qualityManager.currentTier === 'low' && panicFrames === 0) {
           setLoadingStage('Testing Medium graphics...', 96)
           qualityManager.startMediumProbe()
           return
@@ -411,11 +502,11 @@ import Lenis from 'lenis';
   function update(timeNow) {
     // Lenis needs the high-res timestamp
     if (timeNow) lenis.raf(timeNow);
-    updateLoadingProgress()
 
     const frameTimestamp = timeNow ?? performance.now()
     delta = (frameTimestamp - lastframe) / 1000
     time += delta
+    updateLoadingProgress(delta)
 
     // scroll logic
     const scrollViewportUnits = lenis.scroll / Math.max(1, window.innerHeight);
@@ -428,53 +519,92 @@ import Lenis from 'lenis';
 
     // Frame-time quality sampling is handled by ThreeDQualityManager.
 
-    // ── Cinematic Camera Trajectory ──
-    // 0.0 -> High Above (Dist: 25, Elev: 60°)
-    // 1.0 -> Edge-On Rings (Dist: 4, Elev: 5°)
+    // ── The journey ──
+    // Fall toward the black hole, black out at the closest point, travel the
+    // passage, and come out of a wormhole into a different sky. Every value
+    // below is a pure function of scroll, so scrubbing backwards retraces it.
     const startDist = 25.0;
-    const endDist = 5.1;
-    const horizonDist = 1.8;
+    const endDist = 5.1;      // closest point of the approach
+    const closeDist = 1.8;    // where the frame goes black
+    // The shader composes the object at 3/4 width, which leaves plenty of room
+    // beside it in landscape and almost none in portrait. Emerging at a fixed
+    // distance therefore crops the wormhole against the right edge on a phone,
+    // so back off in proportion to how narrow the viewport is.
+    const viewportAspect = Math.max(window.innerWidth / window.innerHeight, 0.4);
+    const emergeDist = 7.0 * Math.min(1.9, Math.max(1.0, 1.6 / viewportAspect));
     const departureDist = 40.0;
     const startElev = 60.0 * Math.PI / 180;
     const endElev = 5.0 * Math.PI / 180;
-    const approachEnd = 6.0;
-    const bloomEnd = 7.5;
-    const departureEnd = 18.0;
 
-    const approachProgress = Math.max(0, Math.min(1, scrollViewportUnits / approachEnd));
-    const bloomProgress = Math.max(0, Math.min(1, (scrollViewportUnits - approachEnd) / (bloomEnd - approachEnd)));
-    const departureProgress = Math.max(0, Math.min(1, (scrollViewportUnits - bloomEnd) / (departureEnd - bloomEnd)));
-    const approachEase = approachProgress * approachProgress * (3.0 - 2.0 * approachProgress);
-    const bloomEase = bloomProgress * bloomProgress * (3.0 - 2.0 * bloomProgress);
-    const departureEase = departureProgress * departureProgress * (3.0 - 2.0 * departureProgress);
-    const entryRotationProgress = Math.max(0, Math.min(1, (bloomProgress - 0.9) / 0.1));
-    const entryRotationEase = entryRotationProgress * entryRotationProgress * (3.0 - 2.0 * entryRotationProgress);
-    const exitReorientationProgress = Math.max(0, Math.min(1, departureProgress / 0.66));
-    const exitReorientationEase = exitReorientationProgress * exitReorientationProgress * (3.0 - 2.0 * exitReorientationProgress);
-    const exitArc = Math.PI * 0.12 * departureEase;
+    const approachProgress = clamp01(scrollViewportUnits / JOURNEY.approachEnd);
+    const closeProgress = clamp01(
+      (scrollViewportUnits - JOURNEY.approachEnd) / (JOURNEY.blackoutEnd - JOURNEY.approachEnd));
+    const tunnelProgress = clamp01(
+      (scrollViewportUnits - JOURNEY.blackoutEnd) / (JOURNEY.tunnelEnd - JOURNEY.blackoutEnd));
+    const emergeProgress = clamp01(
+      (scrollViewportUnits - JOURNEY.tunnelEnd) / (JOURNEY.emergenceEnd - JOURNEY.tunnelEnd));
+    const departureProgress = clamp01(
+      (scrollViewportUnits - JOURNEY.emergenceEnd) / (JOURNEY.departureEnd - JOURNEY.emergenceEnd));
 
-    sourceLicenseLinks?.classList.toggle('visible', scrollViewportUnits >= departureEnd - 0.15)
+    const approachEase = smoothstep(approachProgress);
+    const closeEase = smoothstep(closeProgress);
+    const emergeEase = smoothstep(emergeProgress);
+    const departureEase = smoothstep(departureProgress);
 
-    if (scrollViewportUnits <= approachEnd) {
+    // The raymarcher is only on either side of the passage. Between the two it
+    // is not just hidden but skipped — that is where the frame budget for the
+    // tunnel comes from.
+    const inTunnel = scrollViewportUnits > JOURNEY.blackoutEnd
+      && scrollViewportUnits <= JOURNEY.tunnelEnd;
+    const inNewWorld = scrollViewportUnits > JOURNEY.tunnelEnd;
+
+    sourceLicenseLinks?.classList.toggle('visible', scrollViewportUnits >= JOURNEY.departureEnd - 0.15)
+
+    if (scrollViewportUnits <= JOURNEY.approachEnd) {
       cameraConfig.distance = startDist + (endDist - startDist) * approachEase;
-    } else if (scrollViewportUnits <= bloomEnd) {
-      cameraConfig.distance = endDist + (horizonDist - endDist) * bloomEase;
+    } else if (scrollViewportUnits <= JOURNEY.blackoutEnd) {
+      cameraConfig.distance = endDist + (closeDist - endDist) * closeEase;
+    } else if (inTunnel) {
+      cameraConfig.distance = closeDist;
     } else {
-      cameraConfig.distance = horizonDist + (departureDist - horizonDist) * departureEase;
+      cameraConfig.distance = emergeDist + (departureDist - emergeDist) * departureEase;
     }
 
-    // Hold the low elevation through the transformed-world departure.
+    // Hold the low elevation through the new world.
     if (!cameraConfig.enableDrag) {
       observer.elevationAngle = startElev + (endElev - startElev) * approachEase;
     }
 
-    // Reduce bloom during approach for a clearer accretion disk, then ramp
-    // from that restrained state into the transformed-world peak.
+    updateWorldAppearance(inNewWorld ? emergeEase : 0);
+    updateTransitionVeil(closeProgress, tunnelProgress, emergeProgress, inTunnel);
+
+    // Restrain bloom through the approach so the disk stays legible, then set it
+    // per phase. Nothing here is allowed to sit at threshold 0 — that is what
+    // bleached the whole back half of the journey before.
     const approachBloomStrength = bloomConfig.strength + (0.2 - bloomConfig.strength) * approachEase;
     const approachBloomThreshold = bloomConfig.threshold + (0.1 - bloomConfig.threshold) * approachEase;
-    bloomPass.strength = approachBloomStrength + (3.0 - approachBloomStrength) * bloomEase;
-    bloomPass.radius = bloomConfig.radius + (1.0 - bloomConfig.radius) * bloomEase;
-    bloomPass.threshold = approachBloomThreshold + (0.0 - approachBloomThreshold) * bloomEase;
+    if (inTunnel) {
+      bloomPass.strength = 0.9;
+      bloomPass.radius = 1.0;
+      bloomPass.threshold = 0.55;
+    } else if (inNewWorld) {
+      // The wormhole is an emitter now, so the threshold has to stay high
+      // enough that its light blooms without taking the sky with it.
+      bloomPass.strength = 0.95;
+      bloomPass.radius = 1.0;
+      bloomPass.threshold = 0.5;
+    } else {
+      bloomPass.strength = approachBloomStrength + (0.85 - approachBloomStrength) * closeEase;
+      bloomPass.radius = bloomConfig.radius + (1.0 - bloomConfig.radius) * closeEase;
+      bloomPass.threshold = approachBloomThreshold + (0.12 - approachBloomThreshold) * closeEase;
+    }
+
+    tunnelActive = inTunnel;
+    if (inTunnel) {
+      const reveal = clamp01((tunnelProgress - 0.10) / 0.14);
+      updateTunnel(tunnelProgress, reveal, time);
+    }
+
 
     const currentScrollY = lenis.scroll;
     const scrollDelta = currentScrollY - lastScrollY;
@@ -485,12 +615,10 @@ import Lenis from 'lenis';
     else if (scrollDelta < 0) orbitDirection = -1;
 
     // 2. Calculate target speed (base speed + scroll momentum)
-    const extraSpeed = Math.abs(scrollDelta) * 0.1; 
-    // Spin rapidly while crossing the near-horizon transition, then return to
-    // normal once departure reaches the original closest distance again.
-    const isInsideTransitionDistance = scrollViewportUnits > approachEnd && cameraConfig.distance <= endDist;
-    const isHorizonViewFlipping = entryRotationProgress > 0 && departureProgress <= 0;
-    const cinematicOrbitBoost = isInsideTransitionDistance && !isHorizonViewFlipping ? 10.1 : 1.0;
+    const extraSpeed = Math.abs(scrollDelta) * 0.1;
+    // Spin hard only through the dive itself. The new world is meant to feel
+    // like arriving somewhere, so it gets the ordinary idle drift back.
+    const cinematicOrbitBoost = closeProgress > 0 && tunnelProgress <= 0 ? 10.1 : 1.0;
     const targetOrbitSpeed = (BASE_ORBIT_SPEED + extraSpeed) * orbitDirection * cinematicOrbitBoost;
 
     // 3. Smoothly accelerate/decelerate towards target speed
@@ -506,13 +634,26 @@ import Lenis from 'lenis';
     observer.distance = cameraConfig.distance
     observer.update(delta)
     cameraControl.update(delta)
-    applyExitTrajectory(exitArc, departureProgress)
-    applyExitViewDirection(entryRotationEase, departureProgress, exitReorientationEase)
 
     // slowly revolve particles around the BH when toggle is on
     if (cameraConfig.particleOrbit) {
       particleSceneLensed.rotation.y += delta * 0.01  // ~1 full revolution per ~2.5 min
       particleSceneUnlensed.rotation.y -= delta * 0.01 // rotate in opposite direction
+    }
+
+    // The planet holds off until the throat has had the frame to itself for a
+    // while, then fades up as it swings in. Placed after the orbit has been
+    // advanced, because it is positioned from the camera's azimuth and would
+    // otherwise sit a frame behind the camera it is framed against.
+    const planetProgress = clamp01((departureProgress - 0.18) / 0.82)
+    uniforms.planet_amount.value = inNewWorld ? smoothstep(clamp01(planetProgress / 0.35)) : 0
+    // Placed on every new-world frame, not only on the ones it is visible for.
+    // Gating the placement on the same flag as the draw left the mesh wherever it
+    // was last put — including its initial position at the origin — so the first
+    // frame after it faded up could sample a planet that was still sitting inside
+    // the throat.
+    if (inNewWorld) {
+      updatePlanet(planetProgress, observer, window.innerWidth / window.innerHeight)
     }
 
     // update shader variables
@@ -527,6 +668,19 @@ import Lenis from 'lenis';
   }
 
   function render() {
+    // Swapping what the existing RenderPass points at is the whole handover —
+    // bloom, sizing and the composer chain are shared by both worlds.
+    if (tunnelActive) {
+      renderPass.scene = tunnelScene
+      renderPass.camera = tunnelCamera
+      renderer.setRenderTarget(null)
+      composer.render()
+      return
+    }
+
+    renderPass.scene = scene
+    renderPass.camera = camera
+
     const particleTarget = effectConfig.show_lensing
       ? particleTargetLensed
       : particleTargetUnlensed
@@ -538,11 +692,88 @@ import Lenis from 'lenis';
     renderer.setRenderTarget(particleTarget)
     renderer.clear()
     renderer.render(particleScene, particleCamera)
-    
+
+    // Only drawn once there is something to draw, so the approach and the
+    // passage pay nothing for it.
+    if (uniforms.planet_amount.value > 0) {
+      // The renderer's clear alpha is 1, which is right for the particle targets
+      // because they composite additively and their alpha is never read. This one
+      // is composited alpha-over, so clearing it opaque would paint a black frame
+      // across the whole sky. Cleared transparent, and put back afterwards.
+      renderer.setClearAlpha(0)
+      renderer.setRenderTarget(planetTarget)
+      renderer.clear()
+      renderer.render(planetScene, planetCamera)
+      renderer.setClearAlpha(1)
+    }
+
     renderer.setRenderTarget(null)
 
     // Main ray-marching + bloom.
     composer.render()
+  }
+
+  // Blends the shader between the two worlds. At mix 0 every uniform holds the
+  // value the black hole was built with, so the approach is untouched.
+  function updateWorldAppearance(mix) {
+    uniforms.throat_throughput.value = NEW_WORLD.throatThroughput * mix
+    // The GUI toggle owns the disk everywhere the journey does not. Only the new
+    // world overrides it, and only ever downwards. The cut lands while the white
+    // arrival veil is still opaque, so the disk is never seen going out.
+    uniforms.accretion_disk.value = effectConfig.accretion_disk && mix <= 0
+    uniforms.disk_tint.value.lerpVectors(OLD_WORLD.diskTint, NEW_WORLD.diskTint, mix)
+    uniforms.bg_tint.value.lerpVectors(OLD_WORLD.bgTint, NEW_WORLD.bgTint, mix)
+    uniforms.space_color_plane.value.lerpVectors(
+      OLD_WORLD.spaceColorPlane, NEW_WORLD.spaceColorPlane, mix)
+    uniforms.space_color_pole.value.lerpVectors(
+      OLD_WORLD.spaceColorPole, NEW_WORLD.spaceColorPole, mix)
+  }
+
+  let veilColor = ''
+  let veilOpacity = -1
+  let vignetteOpacity = -1
+
+  // Black going in, white coming out. Both scene swaps happen while this is
+  // fully opaque, so neither is ever visible.
+  function updateTransitionVeil(closeProgress, tunnelProgress, emergeProgress, inTunnel) {
+    let color = '#000000'
+    let opacity = 0
+
+    if (emergeProgress > 0) {
+      color = '#ffffff'
+      opacity = 1 - clamp01((emergeProgress - 0.05) / 0.35)
+    } else if (tunnelProgress > 0) {
+      if (tunnelProgress >= 0.92) {
+        color = '#ffffff'
+        opacity = (tunnelProgress - 0.92) / 0.08
+      } else {
+        // Held opaque for the first stretch so the horizon message lands on
+        // black, then pulled back to reveal the passage.
+        opacity = 1 - clamp01((tunnelProgress - 0.10) / 0.14)
+      }
+    } else {
+      // Starts early: past this point the camera is inside the disk radius and
+      // the frame is an undifferentiated grey wash, so there is nothing worth
+      // holding on to before the dark.
+      opacity = smoothstep(clamp01((closeProgress - 0.25) / 0.6))
+    }
+
+    if (color !== veilColor) {
+      veilColor = color
+      if (transitionVeil) transitionVeil.style.backgroundColor = color
+    }
+    if (opacity.toFixed(3) !== veilOpacity) {
+      veilOpacity = opacity.toFixed(3)
+      if (transitionVeil) transitionVeil.style.opacity = veilOpacity
+    }
+
+    const vignette = inTunnel
+      ? clamp01((tunnelProgress - 0.10) / 0.14) * (1 - clamp01((tunnelProgress - 0.80) / 0.20))
+      : 0
+    if (vignette.toFixed(3) !== vignetteOpacity) {
+      vignetteOpacity = vignette.toFixed(3)
+      if (cockpitVignette) cockpitVignette.style.opacity = vignetteOpacity
+    }
   }
 
   function updateUniforms() {
@@ -571,25 +802,6 @@ import Lenis from 'lenis';
 
   }
 
-  function applyExitTrajectory(exitArc, departureProgress) {
-    if (cameraConfig.enableDrag || departureProgress <= 0) return;
-
-    observer.position.applyAxisAngle(observer.up, exitArc);
-    observer.velocity.applyAxisAngle(observer.up, exitArc);
-    observer.direction.copy(observer.position).negate().normalize();
-  }
-
-  function applyExitViewDirection(bloomEase, departureProgress, exitReorientationEase) {
-    if (cameraConfig.enableDrag) return;
-
-    const entryFlip = Math.PI * bloomEase;
-    const departureFlip = Math.PI * (1.0 - exitReorientationEase);
-    const yawOffset = departureProgress > 0 ? departureFlip : entryFlip;
-    if (yawOffset <= 0.0001) return;
-
-    observer.direction.applyAxisAngle(observer.up, yawOffset).normalize();
-  }
-
   function dismissLoadingOverlayIfReady() {
     if (loadingOverlayDismissed || !texturesLoaded || !initialQualityBenchmarkComplete) return;
     loadingTargetProgress = 100
@@ -616,6 +828,8 @@ import Lenis from 'lenis';
     disposeGUI();
     storyOverlay.dispose();
     disposeParticleSystem();
+    disposeTunnel();
+    disposePlanet();
     disposeShaderPlane();
     disposeScene();
     disposeTextures();
