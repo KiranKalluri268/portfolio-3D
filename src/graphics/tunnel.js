@@ -73,13 +73,6 @@ const fragmentShader = /* glsl */ `
 
     float wall = pow(body, 1.5) * 0.9 + pow(streak, 2.5) * 1.1;
 
-    // Rings fixed to the wall, so they sweep past the camera as it travels.
-    // Longitudinal streaks alone converge on the vanishing point and read as a
-    // starburst however fast they move — it takes something crossing the view
-    // to establish that this is a tube being flown down.
-    float rings = pow(abs(sin(vUv.y * 62.0 * 3.14159265)), 26.0);
-    wall += rings * 0.75;
-
     // Lit relative to the camera rather than to a fixed point on the tube.
     // Without this the walls hang in place as a static starburst; with it the
     // lit stretch travels with the ship and the surface streams past.
