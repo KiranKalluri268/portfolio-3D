@@ -18,6 +18,12 @@ uniform vec3 cam_vel;
 const float MIN_TEMPERATURE = 1000.0;
 const float TEMPERATURE_RANGE = 39000.0;
 
+// How far left of centre the rays are aimed, in half-screens, so the object being
+// orbited sits at 3/4 width instead of in the middle. src/graphics/planet.js
+// mirrors this when it aims the planet at a screen position, and must be changed
+// with it.
+const float COMPOSE_SHIFT = 0.5;
+
 uniform bool accretion_disk;
 uniform bool use_disk_texture;
 const float DISK_IN = 2.0;
@@ -32,6 +38,10 @@ uniform sampler2D star_texture;
 uniform sampler2D disk_texture;
 uniform sampler2D particle_texture; // Lensed stars (small)
 uniform sampler2D particle_texture_unlensed; // Unlensed stars (large foreground)
+uniform sampler2D planet_texture;
+uniform float planet_amount;        // 0 outside the new world, and the target is not even drawn
+uniform mat4 planet_view_projection;
+uniform float planet_range;         // how far along the ray the planet sits
 uniform bool show_lensing;
 
 // ── World appearance ────────────────────────────────────────────────────────
@@ -168,8 +178,10 @@ void main()	{
   vec2 uv = square_frame(resolution);
 
   // Off-center projection: shift black hole to 3/4 horizontal position.
-  // uv.x is in [-1, +1]; subtracting 0.5 moves the "center" (black hole) to x=0.5 (75% from left).
-  uv.x -= 0.5;
+  // uv.x is in [-1, +1]; subtracting COMPOSE_SHIFT moves the "center" (black hole)
+  // to x=0.5 (75% from left). Anything rendered to an offscreen target and sampled
+  // back by ray direction has to know about this shift — see the planet block.
+  uv.x -= COMPOSE_SHIFT;
 
   uv *= vec2(resolution.x/resolution.y, 1.0);
   vec3 forward = normalize(cam_dir); // 
@@ -345,6 +357,40 @@ void main()	{
       vec2 p_uv_unlensed = vec2(orig_px / aspect * 0.5 + 0.5, orig_py * 0.5 + 0.5);
       if (p_uv_unlensed.x > 0.0 && p_uv_unlensed.x < 1.0 && p_uv_unlensed.y > 0.0 && p_uv_unlensed.y < 1.0) {
         color += texture2D(particle_texture_unlensed, p_uv_unlensed);
+      }
+    }
+
+    // ── The planet ────────────────────────────────────────────────────────
+    // Composited alpha-over, not added: a planet has a night side, and adding it
+    // would leave that side transparent with the sky showing through. This whole
+    // block sits inside "distance > 1.0", so rays that ended at the throat never
+    // reach it — the throat occludes the planet with no depth work.
+    //
+    // Sampled along the straight ray, like the unlensed star layer above and for
+    // the same reason. Sampling along the bent one is more nearly correct and does
+    // produce a second, lensed image of the planet hugging the throat — but that
+    // image reads as a detached sliver rather than as physics, and the bending
+    // visibly warps the planet itself. Both are worst in portrait, where the
+    // throat takes up much more of the frame.
+    // Located by projecting through the planet camera's own matrix rather than by
+    // reconstructing screen coordinates from the ray. The particle layers do the
+    // latter, and it ties them to this shader's exact framing — the half-screen
+    // COMPOSE_SHIFT included, which is why they sample nothing on the left quarter
+    // of the screen. Stars survive that; a planet would be sliced down a hard
+    // vertical edge. Going through the matrix also lets the planet have its own
+    // narrow lens, which is what keeps it round.
+    //
+    // The ray is turned into a point at the planet's own range before projecting.
+    // Only the planet is drawn into that target, so it is the only thing this can
+    // resolve, and at its range the mapping is exact.
+    if (planet_amount > 0.0) {
+      vec4 planet_clip = planet_view_projection * vec4(cam_pos + orig_ray_dir * planet_range, 1.0);
+      if (planet_clip.w > 0.0) {
+        vec2 pl_uv = (planet_clip.xy / planet_clip.w) * 0.5 + 0.5;
+        if (pl_uv.x > 0.0 && pl_uv.x < 1.0 && pl_uv.y > 0.0 && pl_uv.y < 1.0) {
+          vec4 planet = texture2D(planet_texture, pl_uv);
+          color.rgb = mix(color.rgb, planet.rgb, planet.a * planet_amount);
+        }
       }
     }
   }

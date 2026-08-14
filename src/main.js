@@ -6,6 +6,7 @@ import { createConfigGUI } from './gui/datGUI';
 import { ThreeDQualityManager } from './performance/ThreeDQualityManager';
 import { createStoryOverlay } from './story/StoryOverlay';
 import { createTunnel } from './graphics/tunnel';
+import { createPlanet } from './graphics/planet';
 import Lenis from 'lenis';
 
 
@@ -157,6 +158,10 @@ import Lenis from 'lenis';
     disk_texture: { type: "t", value: null },
     particle_texture: { type: "t", value: null },
     particle_texture_unlensed: { type: "t", value: null },
+    planet_texture: { type: "t", value: null },
+    planet_amount: { type: "f", value: 0.0 },
+    planet_view_projection: { type: "m4", value: new THREE.Matrix4() },
+    planet_range: { type: "f", value: 0.0 },
     show_lensing: { type: "b", value: true },
     // Defaults reproduce the black hole exactly — the values below are the
     // constants they replaced in the shader. The journey drives them.
@@ -255,6 +260,16 @@ import Lenis from 'lenis';
   const { tunnelScene, tunnelCamera, updateTunnel, resizeTunnel, disposeTunnel } =
     createTunnel(window.innerWidth / window.innerHeight);
   let tunnelActive = false;
+
+  // Somewhere to arrive. Rendered to its own target and sampled by the shader —
+  // see src/graphics/planet.js for why it does not share the particle ones.
+  const {
+    planetScene, planetTarget, planetCamera, planetViewProjection, planetRange,
+    updatePlanet, resizePlanetTarget, disposePlanet
+  } = createPlanet(window.innerWidth, window.innerHeight);
+  uniforms.planet_texture.value = planetTarget.texture;
+  uniforms.planet_view_projection.value = planetViewProjection;
+  uniforms.planet_range.value = planetRange;
   ready.then(() => {
     uniforms.bg_texture.value = textures.get('bg1')
     uniforms.star_texture.value = textures.get('star')
@@ -311,6 +326,7 @@ import Lenis from 'lenis';
     composer.setPixelRatio(pixelRatio)
     composer.setSize(window.innerWidth, window.innerHeight)
     resizeParticleTargets(renderWidth, renderHeight)
+    resizePlanetTarget(renderWidth, renderHeight)
     resizeTunnel(window.innerWidth / window.innerHeight)
     uniforms.resolution.value.set(renderWidth, renderHeight)
   }
@@ -589,6 +605,7 @@ import Lenis from 'lenis';
       updateTunnel(tunnelProgress, reveal, time);
     }
 
+
     const currentScrollY = lenis.scroll;
     const scrollDelta = currentScrollY - lastScrollY;
     lastScrollY = currentScrollY;
@@ -622,6 +639,21 @@ import Lenis from 'lenis';
     if (cameraConfig.particleOrbit) {
       particleSceneLensed.rotation.y += delta * 0.01  // ~1 full revolution per ~2.5 min
       particleSceneUnlensed.rotation.y -= delta * 0.01 // rotate in opposite direction
+    }
+
+    // The planet holds off until the throat has had the frame to itself for a
+    // while, then fades up as it swings in. Placed after the orbit has been
+    // advanced, because it is positioned from the camera's azimuth and would
+    // otherwise sit a frame behind the camera it is framed against.
+    const planetProgress = clamp01((departureProgress - 0.18) / 0.82)
+    uniforms.planet_amount.value = inNewWorld ? smoothstep(clamp01(planetProgress / 0.35)) : 0
+    // Placed on every new-world frame, not only on the ones it is visible for.
+    // Gating the placement on the same flag as the draw left the mesh wherever it
+    // was last put — including its initial position at the origin — so the first
+    // frame after it faded up could sample a planet that was still sitting inside
+    // the throat.
+    if (inNewWorld) {
+      updatePlanet(planetProgress, observer, window.innerWidth / window.innerHeight)
     }
 
     // update shader variables
@@ -660,7 +692,21 @@ import Lenis from 'lenis';
     renderer.setRenderTarget(particleTarget)
     renderer.clear()
     renderer.render(particleScene, particleCamera)
-    
+
+    // Only drawn once there is something to draw, so the approach and the
+    // passage pay nothing for it.
+    if (uniforms.planet_amount.value > 0) {
+      // The renderer's clear alpha is 1, which is right for the particle targets
+      // because they composite additively and their alpha is never read. This one
+      // is composited alpha-over, so clearing it opaque would paint a black frame
+      // across the whole sky. Cleared transparent, and put back afterwards.
+      renderer.setClearAlpha(0)
+      renderer.setRenderTarget(planetTarget)
+      renderer.clear()
+      renderer.render(planetScene, planetCamera)
+      renderer.setClearAlpha(1)
+    }
+
     renderer.setRenderTarget(null)
 
     // Main ray-marching + bloom.
@@ -783,6 +829,7 @@ import Lenis from 'lenis';
     storyOverlay.dispose();
     disposeParticleSystem();
     disposeTunnel();
+    disposePlanet();
     disposeShaderPlane();
     disposeScene();
     disposeTextures();
