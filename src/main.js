@@ -496,7 +496,12 @@ import Lenis from 'lenis';
     const startDist = 25.0;
     const endDist = 5.1;      // closest point of the approach
     const closeDist = 1.8;    // where the frame goes black
-    const emergeDist = 7.0;   // how close the wormhole is when we come out
+    // The shader composes the object at 3/4 width, which leaves plenty of room
+    // beside it in landscape and almost none in portrait. Emerging at a fixed
+    // distance therefore crops the wormhole against the right edge on a phone,
+    // so back off in proportion to how narrow the viewport is.
+    const viewportAspect = Math.max(window.innerWidth / window.innerHeight, 0.4);
+    const emergeDist = 7.0 * Math.min(1.9, Math.max(1.0, 1.6 / viewportAspect));
     const departureDist = 40.0;
     const startElev = 60.0 * Math.PI / 180;
     const endElev = 5.0 * Math.PI / 180;
