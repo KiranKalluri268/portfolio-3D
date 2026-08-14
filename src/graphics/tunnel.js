@@ -92,7 +92,7 @@ const fragmentShader = /* glsl */ `
     // Softens the rim so the tunnel opens into the light rather than stopping at
     // a disc. Confined to the far end — spread any wider and it floods the whole
     // tube through bloom and the passage becomes a white screen.
-    color += uColorFar * pow(toExit, 12.0) * uExitGlow * 0.9;
+    color += uColorFar * pow(toExit, 12.0) * uExitGlow * 0.45;
 
     gl_FragColor = vec4(color * uReveal, 1.0);
   }
@@ -161,7 +161,7 @@ export function createTunnel(aspect = 1) {
     // The mouth only starts to bite in the last third, so the arrival reads as
     // arriving somewhere rather than a light that was always on.
     uniforms.uExitGlow.value = Math.max(0, (progress - 0.35) / 0.65);
-    mouthMaterial.opacity = Math.max(0, (progress - 0.45) / 0.55) * 0.7 * reveal;
+    mouthMaterial.opacity = Math.max(0, (progress - 0.45) / 0.55) * 0.4 * reveal;
   }
 
   function resize(nextAspect) {

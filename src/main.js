@@ -672,11 +672,11 @@ import Lenis from 'lenis';
 
     if (emergeProgress > 0) {
       color = '#ffffff'
-      opacity = 1 - clamp01((emergeProgress - 0.10) / 0.45)
+      opacity = 1 - clamp01((emergeProgress - 0.05) / 0.35)
     } else if (tunnelProgress > 0) {
-      if (tunnelProgress >= 0.86) {
+      if (tunnelProgress >= 0.92) {
         color = '#ffffff'
-        opacity = (tunnelProgress - 0.86) / 0.14
+        opacity = (tunnelProgress - 0.92) / 0.08
       } else {
         // Held opaque for the first stretch so the horizon message lands on
         // black, then pulled back to reveal the passage.
