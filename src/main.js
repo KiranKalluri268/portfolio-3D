@@ -481,9 +481,13 @@ import Lenis from 'lenis';
     // from that restrained state into the transformed-world peak.
     const approachBloomStrength = bloomConfig.strength + (0.2 - bloomConfig.strength) * approachEase;
     const approachBloomThreshold = bloomConfig.threshold + (0.1 - bloomConfig.threshold) * approachEase;
-    bloomPass.strength = approachBloomStrength + (3.0 - approachBloomStrength) * bloomEase;
-    bloomPass.radius = bloomConfig.radius + (1.0 - bloomConfig.radius) * bloomEase;
-    bloomPass.threshold = approachBloomThreshold + (0.0 - approachBloomThreshold) * bloomEase;
+    // bloomEase saturates at 1 and stays there for the rest of the scroll, so the
+    // flare has to be released explicitly against departure — otherwise strength
+    // 3.0 / threshold 0.0 persists to the end and washes the sky flat white.
+    const flareEase = bloomEase * (1.0 - departureEase);
+    bloomPass.strength = approachBloomStrength + (3.0 - approachBloomStrength) * flareEase;
+    bloomPass.radius = bloomConfig.radius + (1.0 - bloomConfig.radius) * flareEase;
+    bloomPass.threshold = approachBloomThreshold + (0.0 - approachBloomThreshold) * flareEase;
 
     const currentScrollY = lenis.scroll;
     const scrollDelta = currentScrollY - lastScrollY;
