@@ -118,6 +118,31 @@ vec3 temp_to_color(float temp_kelvin){
 }
 
 
+// One sky, sampled twice: once for the background along the unbent ray, and once
+// through the wormhole throat along the bent one. Keeping it in a single place is
+// what stops the two skies drifting apart as either is tuned.
+//   rotation      degrees about Z, so the far side is a different patch of sky
+//   doppler_factor pass 1.0 to leave the star temperatures alone
+vec3 sample_sky(vec3 dir, float rotation, vec3 tint, vec3 plane_color, vec3 pole_color,
+                float star_gain, float nebula_gain, float doppler_factor){
+  vec2 tex_coord = to_spherical(dir * ROT_Z(rotation * DEG_TO_RAD));
+  vec3 sky = vec3(0.0);
+
+  vec4 star_color = texture2D(star_texture, tex_coord);
+  if (star_color.g > 0.0){
+    float star_temperature = (MIN_TEMPERATURE + TEMPERATURE_RANGE*star_color.r);
+    float star_velocity = star_color.b - 0.5;
+    float star_doppler_factor = sqrt((1.0+star_velocity)/(1.0-star_velocity));
+    if (doppler_shift)
+      star_temperature /= doppler_factor*star_doppler_factor;
+    sky += temp_to_color(star_temperature) * tint * star_color.g * star_gain;
+  }
+
+  sky += mix(plane_color, pole_color, smoothstep(0.0, 0.55, abs(dir.y)));
+  sky += texture2D(bg_texture, tex_coord).rgb * nebula_gain * tint;
+  return sky;
+}
+
 // https://gist.github.com/fieldOfView/5106319
 // https://gamedev.stackexchange.com/questions/93032/what-causes-this-distortion-in-my-perspective-projection-at-steep-view-angles
 // for reference
@@ -261,26 +286,9 @@ void main()	{
   if (distance > 1.0){
 
     // ── Background: ALWAYS straight ray, never affected by lensing toggle ──
-    vec2 tex_coord = to_spherical(orig_ray_dir * ROT_Z(45.0 * DEG_TO_RAD));
-
-    vec4 star_color = texture2D(star_texture, tex_coord);
-    if (star_color.g > 0.0){
-      float star_temperature = (MIN_TEMPERATURE + TEMPERATURE_RANGE*star_color.r);
-      float star_velocity = star_color.b - 0.5;
-      float star_doppler_factor = sqrt((1.0+star_velocity)/(1.0-star_velocity));
-      if (doppler_shift)
-        star_temperature /= ray_doppler_factor*star_doppler_factor;
-      color += vec4(temp_to_color(star_temperature) * bg_tint, 1.0) * star_color.g;
-    }
-
-    float nebula_elev = abs(orig_ray_dir.y);
-    vec3 base_space = mix(
-      space_color_plane,
-      space_color_pole,
-      smoothstep(0.0, 0.55, nebula_elev)
-    );
-    color += vec4(base_space, 1.0);
-    color += texture2D(bg_texture, tex_coord) * 0.2 * vec4(bg_tint, 1.0);
+    color += vec4(sample_sky(orig_ray_dir, 45.0, bg_tint,
+                             space_color_plane, space_color_pole,
+                             1.0, 0.2, ray_doppler_factor), 1.0);
 
     // ── Screen-space lensed particles (Option B) ──────────────────────────
     // Project the bent ray direction onto the camera frustum to get screen UV,
