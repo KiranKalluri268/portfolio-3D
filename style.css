@@ -1,6 +1,35 @@
-body { 
-  margin: 0; 
-  height: 1900vh;
+body {
+  margin: 0;
+  /* Scroll length is the journey's timeline. See JOURNEY in src/main.js — the
+     last phase ends at 20 viewport units, plus one unit of run-out. */
+  height: 2100vh;
+}
+
+/* Covers the handover between the raymarched scene and the tunnel scene: fades
+   to black going in, and blows out to white coming out the other side. Sits
+   under #story-overlay so the horizon message reads against the blackout. */
+#transition-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 16;
+  background-color: #000;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Implies the cockpit without drawing hardware that would have to hold up at
+   every viewport. Only present while travelling through the tunnel. */
+#cockpit-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  opacity: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 78% 68% at 50% 50%,
+      rgba(0, 0, 0, 0) 42%,
+      rgba(0, 0, 0, 0.45) 74%,
+      rgba(0, 0, 0, 0.92) 100%);
 }
 
 html.is-loading,

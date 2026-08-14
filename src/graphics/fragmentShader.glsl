@@ -34,6 +34,18 @@ uniform sampler2D particle_texture; // Lensed stars (small)
 uniform sampler2D particle_texture_unlensed; // Unlensed stars (large foreground)
 uniform bool show_lensing;
 
+// ── World appearance ────────────────────────────────────────────────────────
+// The same geodesic renders both worlds. Only what the horizon and the sky are
+// made of changes, so the lensing that sells the black hole also sells the
+// wormhole. At the defaults below this block is a no-op and the output is
+// identical to the untinted black hole.
+uniform float horizon_emission;  // 0.0 = black hole, >0 = glowing wormhole mouth
+uniform vec3 horizon_color;
+uniform vec3 disk_tint;
+uniform vec3 bg_tint;            // multiplies stars and the nebula plate
+uniform vec3 space_color_plane;  // deep space toward the galactic plane
+uniform vec3 space_color_pole;   // deep space away from it
+
 
 
 vec2 square_frame(vec2 screen_size){
@@ -185,8 +197,10 @@ void main()	{
     bool horizon_mask = distSq < 1.0 && dot(oldpoint, oldpoint) > 1.0;// intersecting eventhorizon
     // does it enter event horizon?
     if (horizon_mask) {
-      vec4 black = vec4(0.0,0.0,0.0,1.0);
-      color += black;
+      // A black hole absorbs the ray; a wormhole mouth returns light along it.
+      // Either way the ray terminates here, so everything outside still bends
+      // around the same mass and the Einstein ring survives the change.
+      color += vec4(horizon_color * horizon_emission, 1.0);
       break;
     }
     
@@ -217,7 +231,7 @@ void main()	{
               disk_alpha /= (ddf * ddf * ddf);
             }
             
-            color += vec4(disk_color)*disk_alpha;
+            color += vec4(disk_color.rgb * disk_tint, disk_color.a)*disk_alpha;
           } else {
           
           // use blackbody 
@@ -227,7 +241,7 @@ void main()	{
           if (doppler_shift)
             disk_temperature /= ray_doppler_factor*disk_doppler_factor;
 
-          vec3 disk_color = temp_to_color(disk_temperature);
+          vec3 disk_color = temp_to_color(disk_temperature) * disk_tint;
           float disk_alpha = clamp(dot(disk_color,disk_color)/3.0,0.0,1.0);
           
           if (beaming) {
@@ -256,17 +270,17 @@ void main()	{
       float star_doppler_factor = sqrt((1.0+star_velocity)/(1.0-star_velocity));
       if (doppler_shift)
         star_temperature /= ray_doppler_factor*star_doppler_factor;
-      color += vec4(temp_to_color(star_temperature), 1.0) * star_color.g;
+      color += vec4(temp_to_color(star_temperature) * bg_tint, 1.0) * star_color.g;
     }
 
     float nebula_elev = abs(orig_ray_dir.y);
     vec3 base_space = mix(
-      vec3(0.01, 0.013, 0.03),
-      vec3(0.0,  0.0,   0.006),
+      space_color_plane,
+      space_color_pole,
       smoothstep(0.0, 0.55, nebula_elev)
     );
     color += vec4(base_space, 1.0);
-    color += texture2D(bg_texture, tex_coord) * 0.2;
+    color += texture2D(bg_texture, tex_coord) * 0.2 * vec4(bg_tint, 1.0);
 
     // ── Screen-space lensed particles (Option B) ──────────────────────────
     // Project the bent ray direction onto the camera frustum to get screen UV,

@@ -43,7 +43,7 @@ export function createScene(renderer) {
   }
 
   return {
-    scene, composer, bloomPass, disposeScene: dispose
+    scene, camera, composer, bloomPass, renderPass, disposeScene: dispose
   }
 }
 
