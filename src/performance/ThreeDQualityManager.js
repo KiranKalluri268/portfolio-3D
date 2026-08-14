@@ -7,6 +7,7 @@ export class ThreeDQualityManager {
     heavyFrameMs = 20,
     panicFrameMs = 50,
     maxFrameGapMs = 250,
+    benchmarkDeadlineMs = 15000,
     heavyFrameLimit = 5,
     heavyFrameWindowMs = 1500,
     cooldownMs = 7000,
@@ -44,6 +45,17 @@ export class ThreeDQualityManager {
     this.warmupComplete = false;
     this.warmupHeavyFrames = 0;
     this.warmupPanicFrames = 0;
+
+    // Safety net for the initial benchmark. Frames longer than maxFrameGapMs are
+    // discarded as invalid samples, so a device slow enough that *every* frame
+    // exceeds that gap never accumulates warmup time and never completes — which
+    // strands the caller's loading gate forever. This deadline is real wall clock
+    // so it trips in bounded time no matter how few frames the device manages;
+    // time spent hidden is subtracted so a backgrounded tab does not burn it.
+    this.benchmarkDeadlineMs = benchmarkDeadlineMs;
+    this.benchmarkStartedAtMs = null;
+    this.benchmarkHiddenMs = 0;
+    this.hiddenAtMs = null;
 
     // Anti-oscillation: after any tier change, ignore ordinary upgrade/downgrade
     // signals until the cooldown expires. Panic frames can still downgrade.
@@ -104,6 +116,17 @@ export class ThreeDQualityManager {
     this.latestFrameMs = frameMs;
 
     if (frameMs <= 0) return;
+
+    // Check the benchmark deadline before any early return can skip it.
+    if (!this.warmupComplete) {
+      if (this.benchmarkStartedAtMs === null) this.benchmarkStartedAtMs = timestampMs;
+      const benchmarkElapsedMs =
+        timestampMs - this.benchmarkStartedAtMs - this.benchmarkHiddenMs;
+      if (benchmarkElapsedMs >= this.benchmarkDeadlineMs) {
+        this.completeWarmup('benchmark-deadline');
+        return;
+      }
+    }
 
     // Long gaps come from tab suspension, sleep, or debugger pauses. They are
     // not valid GPU samples and must never trigger panic downgrades.
@@ -183,12 +206,29 @@ export class ThreeDQualityManager {
 
     if (this.warmupElapsedMs < this.warmupMs) return;
 
+    this.completeWarmup('warmup-elapsed');
+  }
+
+  completeWarmup(reason) {
+    if (this.warmupComplete) return;
+
     this.warmupComplete = true;
+    this.lastAdjustmentReason = reason;
     this.onWarmupComplete({
       tier: this.currentTier,
       heavyFrames: this.warmupHeavyFrames,
       panicFrames: this.warmupPanicFrames,
+      reason,
     });
+
+    // A timed-out benchmark never reached updateWarmup, so its heavy/panic
+    // counters are zero for the worst devices rather than the best ones. Reading
+    // them as headroom would upgrade exactly the hardware that just failed to
+    // render — drop to the safest tier instead.
+    if (reason === 'benchmark-deadline') {
+      if (this.currentTier !== 'low') this.downgrade('benchmark-deadline');
+      return;
+    }
 
     // Only enhance if the baseline survived warmup with clear headroom.
     if (this.warmupHeavyFrames === 0 && this.warmupPanicFrames === 0) {
@@ -299,6 +339,17 @@ export class ThreeDQualityManager {
   }
 
   resetTiming(timestampMs = null) {
+    // A null timestamp means the page went away (hidden tab, suspension). Bank
+    // that stretch so it cannot be charged against the benchmark deadline —
+    // otherwise a visitor who switches tabs during load returns to a device that
+    // was judged on time it never got to render in.
+    if (timestampMs === null) {
+      if (this.hiddenAtMs === null) this.hiddenAtMs = performance.now();
+    } else if (this.hiddenAtMs !== null) {
+      this.benchmarkHiddenMs += performance.now() - this.hiddenAtMs;
+      this.hiddenAtMs = null;
+    }
+
     this.previousTimestampMs = timestampMs;
     this.heavyFrameTimestamps.length = 0;
     this.upgradeStableElapsedMs = 0;

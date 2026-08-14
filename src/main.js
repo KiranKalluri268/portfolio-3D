@@ -29,8 +29,13 @@ import Lenis from 'lenis';
     if (loadingStatus) loadingStatus.textContent = message
   }
 
-  function updateLoadingProgress() {
-    loadingDisplayedProgress += (loadingTargetProgress - loadingDisplayedProgress) * 0.08
+  function updateLoadingProgress(frameDeltaSeconds) {
+    // Frame-rate independent easing. A fixed 0.08-per-frame lerp is ~0.2s at
+    // 60fps but crawls to nearly a minute at 1fps — on exactly the slow devices
+    // where everything is already loaded and the visitor is staring at 89%.
+    // This reproduces the 60fps feel at any frame rate.
+    const smoothing = 1 - Math.pow(1 - 0.08, Math.min(frameDeltaSeconds, 0.5) * 60)
+    loadingDisplayedProgress += (loadingTargetProgress - loadingDisplayedProgress) * smoothing
     if (loadingTargetProgress >= 100 && loadingDisplayedProgress > 99.5) loadingDisplayedProgress = 100
     if (loadingPercentage) loadingPercentage.textContent = `${Math.floor(loadingDisplayedProgress)}%`
     if (loadingReadyToDismiss && loadingDisplayedProgress === 100 && !entryGateArmed) {
@@ -318,6 +323,7 @@ import Lenis from 'lenis';
     heavyFrameMs: 20,
     panicFrameMs: 50,
     maxFrameGapMs: 250,
+    benchmarkDeadlineMs: 15000,
     heavyFrameLimit: 5,
     heavyFrameWindowMs: 1500,
     cooldownMs: 7000,
@@ -342,13 +348,16 @@ import Lenis from 'lenis';
       }
       applyPerformancePreset(newTier, false);
     },
-    onWarmupComplete: ({ tier, heavyFrames, panicFrames }) => {
+    onWarmupComplete: ({ tier, heavyFrames, panicFrames, reason }) => {
       console.log(
         "Quality Manager: Warmup complete at " + tier +
-        " (" + heavyFrames + " heavy frames, " + panicFrames + " panic frames)"
+        " (" + heavyFrames + " heavy frames, " + panicFrames + " panic frames, " + reason + ")"
       );
       setTimeout(() => {
-        if (qualityManager.currentTier === 'low' && panicFrames === 0) {
+        // A benchmark that ran out of wall-clock never sampled a usable frame,
+        // so its zeroed counters are not evidence of spare capacity. Settle at
+        // the safe tier and let the visitor in rather than probing upward.
+        if (reason !== 'benchmark-deadline' && qualityManager.currentTier === 'low' && panicFrames === 0) {
           setLoadingStage('Testing Medium graphics...', 96)
           qualityManager.startMediumProbe()
           return
@@ -411,11 +420,11 @@ import Lenis from 'lenis';
   function update(timeNow) {
     // Lenis needs the high-res timestamp
     if (timeNow) lenis.raf(timeNow);
-    updateLoadingProgress()
 
     const frameTimestamp = timeNow ?? performance.now()
     delta = (frameTimestamp - lastframe) / 1000
     time += delta
+    updateLoadingProgress(delta)
 
     // scroll logic
     const scrollViewportUnits = lenis.scroll / Math.max(1, window.innerHeight);
