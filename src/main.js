@@ -178,7 +178,11 @@ import Lenis from 'lenis';
     throat_rim_gain: { type: "f", value: 1.2 },
   }
 
-  // The world we emerge into after the wormhole: warm sky, cool disk.
+  // The world we emerge into: warm sky, and no accretion disk. The disk is the
+  // black hole's tell — the dark gap between the horizon at r=1 and the disk's
+  // inner edge at r=2 is the silhouette itself — so the new world does without
+  // one, the way a wormhole does. diskTint still matters on the way through:
+  // the disk is on screen until emergence starts.
   const NEW_WORLD = {
     throatThroughput: 1.0,
     diskTint: new THREE.Vector3(0.62, 0.86, 1.0),
@@ -667,6 +671,10 @@ import Lenis from 'lenis';
   // value the black hole was built with, so the approach is untouched.
   function updateWorldAppearance(mix) {
     uniforms.throat_throughput.value = NEW_WORLD.throatThroughput * mix
+    // The GUI toggle owns the disk everywhere the journey does not. Only the new
+    // world overrides it, and only ever downwards. The cut lands while the white
+    // arrival veil is still opaque, so the disk is never seen going out.
+    uniforms.accretion_disk.value = effectConfig.accretion_disk && mix <= 0
     uniforms.disk_tint.value.lerpVectors(OLD_WORLD.diskTint, NEW_WORLD.diskTint, mix)
     uniforms.bg_tint.value.lerpVectors(OLD_WORLD.bgTint, NEW_WORLD.bgTint, mix)
     uniforms.space_color_plane.value.lerpVectors(
