@@ -160,17 +160,27 @@ import Lenis from 'lenis';
     show_lensing: { type: "b", value: true },
     // Defaults reproduce the black hole exactly — the values below are the
     // constants they replaced in the shader. The journey drives them.
-    horizon_emission: { type: "f", value: 0.0 },
-    horizon_color: { type: "v3", value: new THREE.Vector3(1.0, 0.98, 0.94) },
+    // throat_throughput at 0 collapses the horizon branch back to black, so the
+    // whole approach is untouched however the rest of these are tuned.
+    throat_throughput: { type: "f", value: 0.0 },
     disk_tint: { type: "v3", value: new THREE.Vector3(1.0, 1.0, 1.0) },
     bg_tint: { type: "v3", value: new THREE.Vector3(1.0, 1.0, 1.0) },
     space_color_plane: { type: "v3", value: new THREE.Vector3(0.01, 0.013, 0.03) },
     space_color_pole: { type: "v3", value: new THREE.Vector3(0.0, 0.0, 0.006) },
+    // The far side. Rotated well away from the background's own 45° so the star
+    // pattern through the throat is visibly not the star pattern around it.
+    throat_sky_rotation: { type: "f", value: 160.0 },
+    throat_color_plane: { type: "v3", value: new THREE.Vector3(0.16, 0.11, 0.26) },
+    throat_color_pole: { type: "v3", value: new THREE.Vector3(0.05, 0.03, 0.12) },
+    throat_star_gain: { type: "f", value: 4.0 },
+    throat_nebula_gain: { type: "f", value: 1.1 },
+    throat_rim_color: { type: "v3", value: new THREE.Vector3(0.75, 0.85, 1.0) },
+    throat_rim_gain: { type: "f", value: 1.2 },
   }
 
   // The world we emerge into after the wormhole: warm sky, cool disk.
   const NEW_WORLD = {
-    horizonEmission: 0.9,
+    throatThroughput: 1.0,
     diskTint: new THREE.Vector3(0.62, 0.86, 1.0),
     bgTint: new THREE.Vector3(1.0, 0.82, 0.72),
     spaceColorPlane: new THREE.Vector3(0.045, 0.022, 0.028),
@@ -656,7 +666,7 @@ import Lenis from 'lenis';
   // Blends the shader between the two worlds. At mix 0 every uniform holds the
   // value the black hole was built with, so the approach is untouched.
   function updateWorldAppearance(mix) {
-    uniforms.horizon_emission.value = NEW_WORLD.horizonEmission * mix
+    uniforms.throat_throughput.value = NEW_WORLD.throatThroughput * mix
     uniforms.disk_tint.value.lerpVectors(OLD_WORLD.diskTint, NEW_WORLD.diskTint, mix)
     uniforms.bg_tint.value.lerpVectors(OLD_WORLD.bgTint, NEW_WORLD.bgTint, mix)
     uniforms.space_color_plane.value.lerpVectors(

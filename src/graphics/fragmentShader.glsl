@@ -39,12 +39,24 @@ uniform bool show_lensing;
 // made of changes, so the lensing that sells the black hole also sells the
 // wormhole. At the defaults below this block is a no-op and the output is
 // identical to the untinted black hole.
-uniform float horizon_emission;  // 0.0 = black hole, >0 = glowing wormhole mouth
-uniform vec3 horizon_color;
+uniform float throat_throughput; // 0.0 = black hole absorbs, 1.0 = wormhole transmits
 uniform vec3 disk_tint;
 uniform vec3 bg_tint;            // multiplies stars and the nebula plate
 uniform vec3 space_color_plane;  // deep space toward the galactic plane
 uniform vec3 space_color_pole;   // deep space away from it
+
+// The sky on the far side of the throat. Its own rotation and colours, because a
+// wormhole that opened onto the same sky it sits in would not read as a way out.
+// The gains are not decoration: sampled at the background's own brightness the
+// throat is barely distinguishable from the sky around it and disappears entirely
+// once the camera has pulled back.
+uniform float throat_sky_rotation;
+uniform vec3 throat_color_plane;
+uniform vec3 throat_color_pole;
+uniform float throat_star_gain;
+uniform float throat_nebula_gain;
+uniform vec3 throat_rim_color;
+uniform float throat_rim_gain;
 
 
 
@@ -222,10 +234,26 @@ void main()	{
     bool horizon_mask = distSq < 1.0 && dot(oldpoint, oldpoint) > 1.0;// intersecting eventhorizon
     // does it enter event horizon?
     if (horizon_mask) {
-      // A black hole absorbs the ray; a wormhole mouth returns light along it.
-      // Either way the ray terminates here, so everything outside still bends
-      // around the same mass and the Einstein ring survives the change.
-      color += vec4(horizon_color * horizon_emission, 1.0);
+      // A black hole absorbs the ray. A wormhole is a hole — it hands back what
+      // is on the other side. Either way the ray terminates here, so everything
+      // outside still bends around the same mass and the lensing is untouched.
+      //
+      // velocity at the crossing is the fully bent direction, so the far sky
+      // arrives already swirled toward the rim: the crystal-ball distortion is
+      // the integrator's doing, not an effect layered on top. No doppler — the
+      // far side is not moving with respect to anything here.
+      vec3 through = normalize(velocity);
+      vec3 far_side = sample_sky(through, throat_sky_rotation, vec3(1.0),
+                                 throat_color_plane, throat_color_pole,
+                                 throat_star_gain, throat_nebula_gain, 1.0);
+
+      // Rays crossing tangentially graze the throat and light its edge; rays
+      // crossing head-on do not. That is what gives it a boundary instead of
+      // letting it read as a patch of brighter sky.
+      float rim = 1.0 - abs(dot(through, normalize(point)));
+      far_side += throat_rim_color * pow(rim, 3.0) * throat_rim_gain;
+
+      color += vec4(far_side * throat_throughput, 1.0);
       break;
     }
     
