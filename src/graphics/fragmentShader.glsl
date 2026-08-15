@@ -201,6 +201,12 @@ void main()	{
   // initial color
   vec4 color = vec4(0.0,0.0,0.0,1.0);
 
+  // The disk is kept out of `color` and added at the very end. It is emissive and
+  // accumulates additively, so the order never used to matter — but the planet is
+  // composited alpha-over, and the planet sits far outside the disk. Left in line,
+  // the planet's mix wiped the disk wherever the two crossed on screen, which
+  // portrait made obvious once the disk grew to fill the frame.
+  vec3 disk_glow = vec3(0.0);
 
   // geodesic by leapfrog integration
 
@@ -295,7 +301,7 @@ void main()	{
               disk_alpha /= (ddf * ddf * ddf);
             }
             
-            color += vec4(disk_color.rgb * disk_tint, disk_color.a)*disk_alpha;
+            disk_glow += disk_color.rgb * disk_tint * disk_alpha;
           } else {
           
           // use blackbody 
@@ -313,7 +319,7 @@ void main()	{
             disk_alpha /= (ddf * ddf * ddf);
           }
             
-          color += vec4(disk_color, 1.0)*disk_alpha;
+          disk_glow += disk_color * disk_alpha;
           
           }
         }
@@ -328,6 +334,28 @@ void main()	{
     color += vec4(sample_sky(orig_ray_dir, 45.0, bg_tint,
                              space_color_plane, space_color_pole,
                              1.0, 0.2, ray_doppler_factor), 1.0);
+
+    // ── The planet ────────────────────────────────────────────────────────
+    // Composited alpha-over, and before the star field and the disk, because it
+    // orbits further out than either — so both of those add over it, and only the
+    // black hole covers it. That last part is free: this whole block sits inside
+    // "distance > 1.0", which rays ending at the horizon never reach.
+    //
+    // Sampled by screen position, so it lands exactly as its own camera drew it.
+    // The particle layers instead reconstruct a direction from the ray, which ties
+    // them to this shader's framing — the half-screen COMPOSE_SHIFT included,
+    // which is why they sample nothing across the left quarter of the screen.
+    // Stars survive that; a planet would be sliced down a hard vertical edge.
+    //
+    // Screen space also keeps the planet out of this shader's very wide
+    // projection, where a sphere well off the axis comes out stretched by 1/cos of
+    // the angle — better than half again over toward the left of the frame. It
+    // buys that by not matching the scene's perspective exactly, which at this
+    // distance nothing can see.
+    if (planet_amount > 0.0) {
+      vec4 planet = texture2D(planet_texture, gl_FragCoord.xy / resolution);
+      color.rgb = mix(color.rgb, planet.rgb, planet.a * planet_amount);
+    }
 
     // ── Screen-space lensed particles (Option B) ──────────────────────────
     // Project the bent ray direction onto the camera frustum to get screen UV,
@@ -359,30 +387,10 @@ void main()	{
       }
     }
 
-
-    // ── The planet ────────────────────────────────────────────────────────
-    // Composited alpha-over, not added: a planet has a night side, and adding it
-    // would leave that side transparent with the sky showing through. This whole
-    // block sits inside "distance > 1.0", so rays that ended at the horizon never
-    // reach it — the black hole occludes the planet with no depth work.
-    //
-    // Sampled by screen position, so it lands exactly as its own camera drew it.
-    // The particle layers instead reconstruct a direction from the ray, which ties
-    // them to this shader's framing — the half-screen COMPOSE_SHIFT included,
-    // which is why they sample nothing across the left quarter of the screen.
-    // Stars survive that; a planet would be sliced down a hard vertical edge.
-    //
-    // Screen space also keeps the planet out of this shader's very wide
-    // projection, where a sphere well off the axis comes out stretched by 1/cos of
-    // the angle — better than half again over toward the left of the frame. It
-    // buys that by not matching the scene's perspective exactly, which at this
-    // distance nothing can see.
-    if (planet_amount > 0.0) {
-      vec4 planet = texture2D(planet_texture, gl_FragCoord.xy / resolution);
-      color.rgb = mix(color.rgb, planet.rgb, planet.a * planet_amount);
-    }
   }
 
+  // Added last so it lies over the planet, which is far outside it.
+  color.rgb += disk_glow;
 
   gl_FragColor = color*ray_intensity;
 }
