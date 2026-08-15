@@ -148,8 +148,11 @@ export function createPlanet(width, height) {
    * @param progress  0 as the fall toward the black hole begins, 1 at the end
    * @param observer  the camera being flown, for its position and orientation
    * @param aspect    viewport aspect ratio
+   * @param time      elapsed seconds, so the orbit keeps turning even while
+   *                  scroll is still — a body in orbit doesn't stop when the
+   *                  visitor's hand does
    */
-  function update(progress, observer, aspect) {
+  function update(progress, observer, aspect, time) {
     const eased = progress * progress * (3.0 - 2.0 * progress);
 
     // The camera rides with the observer and looks where it looks, so the planet
@@ -171,18 +174,33 @@ export function createPlanet(width, height) {
 
     // sx and sy are screen coordinates in [-1, 1], and the target is sampled by
     // screen position, so they land exactly. The black hole composes at sx = +0.5
-    // — see COMPOSE_SHIFT — and the planet rides above and left of it, arcing over
-    // and in toward it across the fall: near enough to read as being in its system,
+    // — see COMPOSE_SHIFT — and the planet arcs in above and left of it across the
+    // fall, toward a home position close enough to read as being in its system,
     // clear enough of the disk not to be drawn over it.
     //
-    // How far in it gets has to give way on a narrow viewport. The black hole is
-    // the same angular size either way, but portrait has far less width for it to
-    // be that size in, so by the last unit it owns most of the frame — and a
-    // planet that settles nicely beside it on desktop ends up buried behind it.
+    // How far in that home gets has to give way on a narrow viewport. The black
+    // hole is the same angular size either way, but portrait has far less width
+    // for it to be that size in, so by the last unit it owns most of the frame —
+    // and a planet that settles nicely beside it on desktop ends up buried behind
+    // it.
     const narrow = Math.min(1, Math.max(0, (1.2 - aspect) / 0.8));
     const sxEnd = -0.10 - 0.48 * narrow;
-    const sx = -0.80 + (sxEnd + 0.80) * eased;
-    const sy = 0.30 + 0.22 * Math.sin(Math.PI * (0.15 + 0.70 * eased));
+    const sxHome = -0.80 + (sxEnd + 0.80) * eased;
+    const syHome = 0.30 + 0.22 * Math.sin(Math.PI * (0.15 + 0.70 * eased));
+
+    // Revolves around that home point rather than sitting still on it, so it
+    // reads as a body in orbit and not a cutout pasted beside the black hole. The
+    // orbit is on screen, not in world space: a true orbit at ORBIT_RADIUS (see
+    // below for why that distance is fixed) would sweep tens of degrees across
+    // the sky, carrying the planet on and off screen and out of scale with
+    // everything it needs to stay framed against. Faded in by `eased` so it does
+    // not wobble while still arcing in from the edge, and slow enough — one turn
+    // every 46 seconds — to look orbital rather than jittery.
+    const orbitAngle = time * ((2 * Math.PI) / 46);
+    const orbitAmountX = 0.10 * eased;
+    const orbitAmountY = orbitAmountX * 0.55; // foreshortened, as a tilted orbital plane would be
+    const sx = sxHome + orbitAmountX * Math.cos(orbitAngle);
+    const sy = syHome + orbitAmountY * Math.sin(orbitAngle);
 
     // Placed by unprojecting that screen position and pushing out along it until
     // the planet is ORBIT_RADIUS from the black hole.
@@ -217,9 +235,13 @@ export function createPlanet(width, height) {
     // is most of the frame — left alone the planet grows until it crowds the black
     // hole in portrait while still looking right on desktop, so it is held back a
     // little as the viewport narrows.
+    //
+    // Kept well under the black hole's own scale — this is a body orbiting it, not
+    // a rival to it, and a planet reading as bigger than the thing it orbits reads
+    // as wrong at a glance regardless of the actual physics.
     const framing = Math.min(1, 0.55 + 0.45 * aspect);
-    mesh.scale.setScalar(range * (0.075 + 0.040 * eased) * framing);
-    mesh.rotation.y = progress * 0.35 + 0.6;
+    mesh.scale.setScalar(range * (0.028 + 0.015 * eased) * framing);
+    mesh.rotation.y = progress * 0.35 + orbitAngle * 0.2 + 0.6;
 
     // Lit by the accretion disk, which is the only light in this system and sits
     // at the origin the planet orbits. It used to be lit relative to the view,

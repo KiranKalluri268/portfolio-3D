@@ -662,7 +662,7 @@ import Lenis from 'lenis';
     // so the first frame after it faded up could sample a planet still sitting
     // inside the black hole.
     if (pastTunnel) {
-      updatePlanet(planetProgress, observer, window.innerWidth / window.innerHeight)
+      updatePlanet(planetProgress, observer, window.innerWidth / window.innerHeight, time)
     }
 
     // update shader variables
