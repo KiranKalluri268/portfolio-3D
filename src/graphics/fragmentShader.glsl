@@ -40,8 +40,6 @@ uniform sampler2D particle_texture; // Lensed stars (small)
 uniform sampler2D particle_texture_unlensed; // Unlensed stars (large foreground)
 uniform sampler2D planet_texture;
 uniform float planet_amount;        // 0 outside the new world, and the target is not even drawn
-uniform mat4 planet_view_projection;
-uniform float planet_range;         // how far along the ray the planet sits
 uniform bool show_lensing;
 
 // ── World appearance ────────────────────────────────────────────────────────
@@ -203,6 +201,7 @@ void main()	{
   // initial color
   vec4 color = vec4(0.0,0.0,0.0,1.0);
 
+
   // geodesic by leapfrog integration
 
   vec3 point = cam_pos;
@@ -360,39 +359,30 @@ void main()	{
       }
     }
 
+
     // ── The planet ────────────────────────────────────────────────────────
     // Composited alpha-over, not added: a planet has a night side, and adding it
     // would leave that side transparent with the sky showing through. This whole
-    // block sits inside "distance > 1.0", so rays that ended at the throat never
-    // reach it — the throat occludes the planet with no depth work.
+    // block sits inside "distance > 1.0", so rays that ended at the horizon never
+    // reach it — the black hole occludes the planet with no depth work.
     //
-    // Sampled along the straight ray, like the unlensed star layer above and for
-    // the same reason. Sampling along the bent one is more nearly correct and does
-    // produce a second, lensed image of the planet hugging the throat — but that
-    // image reads as a detached sliver rather than as physics, and the bending
-    // visibly warps the planet itself. Both are worst in portrait, where the
-    // throat takes up much more of the frame.
-    // Located by projecting through the planet camera's own matrix rather than by
-    // reconstructing screen coordinates from the ray. The particle layers do the
-    // latter, and it ties them to this shader's exact framing — the half-screen
-    // COMPOSE_SHIFT included, which is why they sample nothing on the left quarter
-    // of the screen. Stars survive that; a planet would be sliced down a hard
-    // vertical edge. Going through the matrix also lets the planet have its own
-    // narrow lens, which is what keeps it round.
+    // Sampled by screen position, so it lands exactly as its own camera drew it.
+    // The particle layers instead reconstruct a direction from the ray, which ties
+    // them to this shader's framing — the half-screen COMPOSE_SHIFT included,
+    // which is why they sample nothing across the left quarter of the screen.
+    // Stars survive that; a planet would be sliced down a hard vertical edge.
     //
-    // The ray is turned into a point at the planet's own range before projecting.
-    // Only the planet is drawn into that target, so it is the only thing this can
-    // resolve, and at its range the mapping is exact.
+    // Screen space also keeps the planet out of this shader's very wide
+    // projection, where a sphere well off the axis comes out stretched by 1/cos of
+    // the angle — better than half again over toward the left of the frame. It
+    // buys that by not matching the scene's perspective exactly, which at this
+    // distance nothing can see.
     if (planet_amount > 0.0) {
-      vec4 planet_clip = planet_view_projection * vec4(cam_pos + orig_ray_dir * planet_range, 1.0);
-      if (planet_clip.w > 0.0) {
-        vec2 pl_uv = (planet_clip.xy / planet_clip.w) * 0.5 + 0.5;
-        if (pl_uv.x > 0.0 && pl_uv.x < 1.0 && pl_uv.y > 0.0 && pl_uv.y < 1.0) {
-          vec4 planet = texture2D(planet_texture, pl_uv);
-          color.rgb = mix(color.rgb, planet.rgb, planet.a * planet_amount);
-        }
-      }
+      vec4 planet = texture2D(planet_texture, gl_FragCoord.xy / resolution);
+      color.rgb = mix(color.rgb, planet.rgb, planet.a * planet_amount);
     }
   }
+
+
   gl_FragColor = color*ray_intensity;
 }
