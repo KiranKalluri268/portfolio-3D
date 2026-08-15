@@ -160,8 +160,6 @@ import Lenis from 'lenis';
     particle_texture_unlensed: { type: "t", value: null },
     planet_texture: { type: "t", value: null },
     planet_amount: { type: "f", value: 0.0 },
-    planet_view_projection: { type: "m4", value: new THREE.Matrix4() },
-    planet_range: { type: "f", value: 0.0 },
     show_lensing: { type: "b", value: true },
     // Defaults reproduce the black hole exactly — the values below are the
     // constants they replaced in the shader. The journey drives them.
@@ -183,20 +181,20 @@ import Lenis from 'lenis';
     throat_rim_gain: { type: "f", value: 1.2 },
   }
 
-  // The world we emerge into: warm sky, and no accretion disk. The disk is the
-  // black hole's tell — the dark gap between the horizon at r=1 and the disk's
-  // inner edge at r=2 is the silhouette itself — so the new world does without
-  // one, the way a wormhole does. diskTint still matters on the way through:
-  // the disk is on screen until emergence starts.
-  const NEW_WORLD = {
+  // Where we start: warm sky, and no accretion disk. The disk is the black
+  // hole's tell — the dark gap between the horizon at r=1 and the disk's inner
+  // edge at r=2 is the silhouette itself — so the wormhole does without one.
+  const WORMHOLE = {
     throatThroughput: 1.0,
     diskTint: new THREE.Vector3(0.62, 0.86, 1.0),
     bgTint: new THREE.Vector3(1.0, 0.82, 0.72),
     spaceColorPlane: new THREE.Vector3(0.045, 0.022, 0.028),
     spaceColorPole: new THREE.Vector3(0.012, 0.004, 0.008),
   }
-  // Captured before anything drives them, so the return trip is exact.
-  const OLD_WORLD = {
+  // Where we come out. Captured before anything drives them, so these are the
+  // values the shader was built with and the black hole is exactly itself.
+  const BLACK_HOLE = {
+    throatThroughput: 0.0,
     diskTint: uniforms.disk_tint.value.clone(),
     bgTint: uniforms.bg_tint.value.clone(),
     spaceColorPlane: uniforms.space_color_plane.value.clone(),
@@ -204,13 +202,17 @@ import Lenis from 'lenis';
   }
 
   // Phase boundaries, in viewport units of scroll. body height in style.css has
-  // to cover departureEnd with room to spare.
+  // to cover approachEnd with room to spare.
+  //
+  // The wormhole comes first and the black hole last, the order Interstellar
+  // puts them in: cross to the throat, pass through it, and fall toward
+  // Gargantua on the other side.
   const JOURNEY = {
-    approachEnd: 6.0,
-    blackoutEnd: 7.5,
-    tunnelEnd: 12.5,
-    emergenceEnd: 14.0,
-    departureEnd: 20.0,
+    crossingEnd: 5.0,
+    blackoutEnd: 6.5,
+    tunnelEnd: 11.5,
+    arrivalEnd: 13.0,
+    approachEnd: 20.0,
   }
 
   function clamp01(value) {
@@ -264,12 +266,10 @@ import Lenis from 'lenis';
   // Somewhere to arrive. Rendered to its own target and sampled by the shader —
   // see src/graphics/planet.js for why it does not share the particle ones.
   const {
-    planetScene, planetTarget, planetCamera, planetViewProjection, planetRange,
+    planetScene, planetTarget, planetCamera,
     updatePlanet, resizePlanetTarget, disposePlanet
   } = createPlanet(window.innerWidth, window.innerHeight);
   uniforms.planet_texture.value = planetTarget.texture;
-  uniforms.planet_view_projection.value = planetViewProjection;
-  uniforms.planet_range.value = planetRange;
   ready.then(() => {
     uniforms.bg_texture.value = textures.get('bg1')
     uniforms.star_texture.value = textures.get('star')
@@ -520,83 +520,91 @@ import Lenis from 'lenis';
     // Frame-time quality sampling is handled by ThreeDQualityManager.
 
     // ── The journey ──
-    // Fall toward the black hole, black out at the closest point, travel the
-    // passage, and come out of a wormhole into a different sky. Every value
-    // below is a pure function of scroll, so scrubbing backwards retraces it.
-    const startDist = 25.0;
-    const endDist = 5.1;      // closest point of the approach
-    const closeDist = 1.8;    // where the frame goes black
-    // The shader composes the object at 3/4 width, which leaves plenty of room
-    // beside it in landscape and almost none in portrait. Emerging at a fixed
-    // distance therefore crops the wormhole against the right edge on a phone,
-    // so back off in proportion to how narrow the viewport is.
+    // Cross to the wormhole, go dark, travel the passage, and come out falling
+    // toward the black hole. Every value below is a pure function of scroll, so
+    // scrubbing backwards retraces it.
+    const crossingStartDist = 22.0;
+    const crossingNearDist = 5.4;   // as close as we get before the dark
+    const closeDist = 1.8;          // held through the passage
+    const arriveDist = 25.0;        // how far out we come up on the far side
+    // Closest point of the fall, and the last frame of the journey. The black hole
+    // subtends the same angle whatever the viewport, but portrait has far less
+    // width for it to subtend that angle in — at the landscape distance it owns
+    // the whole phone screen, leaving the planet nowhere to be and the disk
+    // running off both edges. Backed off in proportion to how narrow it is.
     const viewportAspect = Math.max(window.innerWidth / window.innerHeight, 0.4);
-    const emergeDist = 7.0 * Math.min(1.9, Math.max(1.0, 1.6 / viewportAspect));
-    const departureDist = 40.0;
+    const narrowFraming = clamp01((1.2 - viewportAspect) / 0.8);
+    const blackHoleDist = 5.1 * (1.0 + 0.55 * narrowFraming);
+    // Nothing swings edge-on across the crossing, so the elevation only decides
+    // how much of the star field sits above the horizon. Held flat: the whole
+    // point of this half is that it is a straight line in.
+    const crossingElev = 15.0 * Math.PI / 180;
     const startElev = 60.0 * Math.PI / 180;
     const endElev = 5.0 * Math.PI / 180;
 
-    const approachProgress = clamp01(scrollViewportUnits / JOURNEY.approachEnd);
+    const crossingProgress = clamp01(scrollViewportUnits / JOURNEY.crossingEnd);
     const closeProgress = clamp01(
-      (scrollViewportUnits - JOURNEY.approachEnd) / (JOURNEY.blackoutEnd - JOURNEY.approachEnd));
+      (scrollViewportUnits - JOURNEY.crossingEnd) / (JOURNEY.blackoutEnd - JOURNEY.crossingEnd));
     const tunnelProgress = clamp01(
       (scrollViewportUnits - JOURNEY.blackoutEnd) / (JOURNEY.tunnelEnd - JOURNEY.blackoutEnd));
-    const emergeProgress = clamp01(
-      (scrollViewportUnits - JOURNEY.tunnelEnd) / (JOURNEY.emergenceEnd - JOURNEY.tunnelEnd));
-    const departureProgress = clamp01(
-      (scrollViewportUnits - JOURNEY.emergenceEnd) / (JOURNEY.departureEnd - JOURNEY.emergenceEnd));
+    const arrivalProgress = clamp01(
+      (scrollViewportUnits - JOURNEY.tunnelEnd) / (JOURNEY.arrivalEnd - JOURNEY.tunnelEnd));
+    const approachProgress = clamp01(
+      (scrollViewportUnits - JOURNEY.arrivalEnd) / (JOURNEY.approachEnd - JOURNEY.arrivalEnd));
 
-    const approachEase = smoothstep(approachProgress);
+    const crossingEase = smoothstep(crossingProgress);
     const closeEase = smoothstep(closeProgress);
-    const emergeEase = smoothstep(emergeProgress);
-    const departureEase = smoothstep(departureProgress);
+    const approachEase = smoothstep(approachProgress);
 
     // The raymarcher is only on either side of the passage. Between the two it
     // is not just hidden but skipped — that is where the frame budget for the
     // tunnel comes from.
     const inTunnel = scrollViewportUnits > JOURNEY.blackoutEnd
       && scrollViewportUnits <= JOURNEY.tunnelEnd;
-    const inNewWorld = scrollViewportUnits > JOURNEY.tunnelEnd;
+    const pastTunnel = scrollViewportUnits > JOURNEY.tunnelEnd;
 
-    sourceLicenseLinks?.classList.toggle('visible', scrollViewportUnits >= JOURNEY.departureEnd - 0.15)
+    sourceLicenseLinks?.classList.toggle('visible', scrollViewportUnits >= JOURNEY.approachEnd - 0.15)
 
-    if (scrollViewportUnits <= JOURNEY.approachEnd) {
-      cameraConfig.distance = startDist + (endDist - startDist) * approachEase;
+    if (scrollViewportUnits <= JOURNEY.crossingEnd) {
+      cameraConfig.distance = crossingStartDist + (crossingNearDist - crossingStartDist) * crossingEase;
     } else if (scrollViewportUnits <= JOURNEY.blackoutEnd) {
-      cameraConfig.distance = endDist + (closeDist - endDist) * closeEase;
+      cameraConfig.distance = crossingNearDist + (closeDist - crossingNearDist) * closeEase;
     } else if (inTunnel) {
       cameraConfig.distance = closeDist;
     } else {
-      cameraConfig.distance = emergeDist + (departureDist - emergeDist) * departureEase;
+      cameraConfig.distance = arriveDist + (blackHoleDist - arriveDist) * approachEase;
     }
 
-    // Hold the low elevation through the new world.
     if (!cameraConfig.enableDrag) {
-      observer.elevationAngle = startElev + (endElev - startElev) * approachEase;
+      observer.elevationAngle = pastTunnel
+        ? startElev + (endElev - startElev) * approachEase
+        : crossingElev;
     }
 
-    updateWorldAppearance(inNewWorld ? emergeEase : 0);
-    updateTransitionVeil(closeProgress, tunnelProgress, emergeProgress, inTunnel);
+    // The two worlds swap outright rather than blending, because the swap happens
+    // while the arrival veil is still fully opaque and nothing of it is on screen.
+    updateWorldAppearance(pastTunnel ? 0 : 1);
+    updateTransitionVeil(closeProgress, tunnelProgress, arrivalProgress, inTunnel);
 
-    // Restrain bloom through the approach so the disk stays legible, then set it
-    // per phase. Nothing here is allowed to sit at threshold 0 — that is what
-    // bleached the whole back half of the journey before.
-    const approachBloomStrength = bloomConfig.strength + (0.2 - bloomConfig.strength) * approachEase;
-    const approachBloomThreshold = bloomConfig.threshold + (0.1 - bloomConfig.threshold) * approachEase;
+    // Set per phase. Nothing here is allowed to sit at threshold 0 — that is what
+    // bleached a whole half of the journey before.
     if (inTunnel) {
       bloomPass.strength = 0.9;
       bloomPass.radius = 1.0;
       bloomPass.threshold = 0.55;
-    } else if (inNewWorld) {
-      // The wormhole is an emitter now, so the threshold has to stay high
-      // enough that its light blooms without taking the sky with it.
+    } else if (pastTunnel) {
+      // Restrained through the fall so the disk stays legible rather than
+      // blooming into a single white mass as it fills the frame.
+      bloomPass.strength = bloomConfig.strength + (0.2 - bloomConfig.strength) * approachEase;
+      bloomPass.radius = bloomConfig.radius;
+      bloomPass.threshold = bloomConfig.threshold + (0.1 - bloomConfig.threshold) * approachEase;
+    } else {
+      // The throat is a light source and it grows to fill the frame on the way
+      // in, so the threshold climbs with it — held at its opening value the
+      // crossing washes out long before the dark arrives to cover it.
       bloomPass.strength = 0.95;
       bloomPass.radius = 1.0;
-      bloomPass.threshold = 0.5;
-    } else {
-      bloomPass.strength = approachBloomStrength + (0.85 - approachBloomStrength) * closeEase;
-      bloomPass.radius = bloomConfig.radius + (1.0 - bloomConfig.radius) * closeEase;
-      bloomPass.threshold = approachBloomThreshold + (0.12 - approachBloomThreshold) * closeEase;
+      bloomPass.threshold = 0.5 + 0.3 * Math.max(crossingEase, closeEase);
     }
 
     tunnelActive = inTunnel;
@@ -616,10 +624,11 @@ import Lenis from 'lenis';
 
     // 2. Calculate target speed (base speed + scroll momentum)
     const extraSpeed = Math.abs(scrollDelta) * 0.1;
-    // Spin hard only through the dive itself. The new world is meant to feel
-    // like arriving somewhere, so it gets the ordinary idle drift back.
-    const cinematicOrbitBoost = closeProgress > 0 && tunnelProgress <= 0 ? 10.1 : 1.0;
-    const targetOrbitSpeed = (BASE_ORBIT_SPEED + extraSpeed) * orbitDirection * cinematicOrbitBoost;
+    // The hard cinematic spin used to belong to the dive into the black hole.
+    // That dive is gone — the crossing is a straight line in, and the fall is
+    // now where the journey ends rather than where it turns — so both halves
+    // run on the ordinary idle drift.
+    const targetOrbitSpeed = (BASE_ORBIT_SPEED + extraSpeed) * orbitDirection;
 
     // 3. Smoothly accelerate/decelerate towards target speed
     currentOrbitSpeed += (targetOrbitSpeed - currentOrbitSpeed) * 5 * delta;
@@ -641,18 +650,18 @@ import Lenis from 'lenis';
       particleSceneUnlensed.rotation.y -= delta * 0.01 // rotate in opposite direction
     }
 
-    // The planet holds off until the throat has had the frame to itself for a
-    // while, then fades up as it swings in. Placed after the orbit has been
-    // advanced, because it is positioned from the camera's azimuth and would
+    // The planet belongs to the black hole's system, so it fades up shortly after
+    // the arrival and rides the whole fall. Placed after the orbit has been
+    // advanced, because it is positioned from the camera's own basis and would
     // otherwise sit a frame behind the camera it is framed against.
-    const planetProgress = clamp01((departureProgress - 0.18) / 0.82)
-    uniforms.planet_amount.value = inNewWorld ? smoothstep(clamp01(planetProgress / 0.35)) : 0
-    // Placed on every new-world frame, not only on the ones it is visible for.
-    // Gating the placement on the same flag as the draw left the mesh wherever it
-    // was last put — including its initial position at the origin — so the first
-    // frame after it faded up could sample a planet that was still sitting inside
-    // the throat.
-    if (inNewWorld) {
+    const planetProgress = approachProgress
+    uniforms.planet_amount.value = pastTunnel ? smoothstep(clamp01(planetProgress / 0.22)) : 0
+    // Placed on every frame past the tunnel, not only on the ones it is visible
+    // for. Gating the placement on the same flag as the draw left the mesh
+    // wherever it was last put — including its initial position at the origin —
+    // so the first frame after it faded up could sample a planet still sitting
+    // inside the black hole.
+    if (pastTunnel) {
       updatePlanet(planetProgress, observer, window.innerWidth / window.innerHeight)
     }
 
@@ -713,20 +722,21 @@ import Lenis from 'lenis';
     composer.render()
   }
 
-  // Blends the shader between the two worlds. At mix 0 every uniform holds the
-  // value the black hole was built with, so the approach is untouched.
+  // Blends the shader between the two worlds. At mix 1 it is the wormhole we set
+  // out from; at mix 0 every uniform holds the value the shader was built with,
+  // so the black hole we arrive at is exactly itself.
   function updateWorldAppearance(mix) {
-    uniforms.throat_throughput.value = NEW_WORLD.throatThroughput * mix
-    // The GUI toggle owns the disk everywhere the journey does not. Only the new
-    // world overrides it, and only ever downwards. The cut lands while the white
-    // arrival veil is still opaque, so the disk is never seen going out.
+    uniforms.throat_throughput.value = WORMHOLE.throatThroughput * mix
+    // The GUI toggle owns the disk everywhere the journey does not. The journey
+    // only ever overrides it downwards, and only for the wormhole half, which has
+    // no disk to show.
     uniforms.accretion_disk.value = effectConfig.accretion_disk && mix <= 0
-    uniforms.disk_tint.value.lerpVectors(OLD_WORLD.diskTint, NEW_WORLD.diskTint, mix)
-    uniforms.bg_tint.value.lerpVectors(OLD_WORLD.bgTint, NEW_WORLD.bgTint, mix)
+    uniforms.disk_tint.value.lerpVectors(BLACK_HOLE.diskTint, WORMHOLE.diskTint, mix)
+    uniforms.bg_tint.value.lerpVectors(BLACK_HOLE.bgTint, WORMHOLE.bgTint, mix)
     uniforms.space_color_plane.value.lerpVectors(
-      OLD_WORLD.spaceColorPlane, NEW_WORLD.spaceColorPlane, mix)
+      BLACK_HOLE.spaceColorPlane, WORMHOLE.spaceColorPlane, mix)
     uniforms.space_color_pole.value.lerpVectors(
-      OLD_WORLD.spaceColorPole, NEW_WORLD.spaceColorPole, mix)
+      BLACK_HOLE.spaceColorPole, WORMHOLE.spaceColorPole, mix)
   }
 
   let veilColor = ''
@@ -735,13 +745,13 @@ import Lenis from 'lenis';
 
   // Black going in, white coming out. Both scene swaps happen while this is
   // fully opaque, so neither is ever visible.
-  function updateTransitionVeil(closeProgress, tunnelProgress, emergeProgress, inTunnel) {
+  function updateTransitionVeil(closeProgress, tunnelProgress, arrivalProgress, inTunnel) {
     let color = '#000000'
     let opacity = 0
 
-    if (emergeProgress > 0) {
+    if (arrivalProgress > 0) {
       color = '#ffffff'
-      opacity = 1 - clamp01((emergeProgress - 0.05) / 0.35)
+      opacity = 1 - clamp01((arrivalProgress - 0.05) / 0.35)
     } else if (tunnelProgress > 0) {
       if (tunnelProgress >= 0.92) {
         color = '#ffffff'
@@ -752,10 +762,12 @@ import Lenis from 'lenis';
         opacity = 1 - clamp01((tunnelProgress - 0.10) / 0.14)
       }
     } else {
-      // Starts early: past this point the camera is inside the disk radius and
-      // the frame is an undifferentiated grey wash, so there is nothing worth
-      // holding on to before the dark.
-      opacity = smoothstep(clamp01((closeProgress - 0.25) / 0.6))
+      // Starts early and closes fast. The throat is a light source filling most of
+      // the frame by this point, so a veil that is merely most of the way down
+      // reads as a grey wash over a bright disc rather than as going dark — it has
+      // to reach full black while there is still something behind it worth
+      // covering, not ease toward it.
+      opacity = smoothstep(clamp01((closeProgress - 0.05) / 0.5))
     }
 
     if (color !== veilColor) {
