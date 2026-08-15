@@ -212,7 +212,11 @@ import Lenis from 'lenis';
     blackoutEnd: 6.5,
     tunnelEnd: 11.5,
     arrivalEnd: 13.0,
-    approachEnd: 20.0,
+    // The fall itself (arrivalEnd to here) is 14 units, twice its old length —
+    // starting the black hole further out (see arriveDist) and not shortening the
+    // scroll it takes to close the distance is what makes the extra distance
+    // actually felt rather than just eased through faster.
+    approachEnd: 27.0,
   }
 
   function clamp01(value) {
@@ -526,7 +530,11 @@ import Lenis from 'lenis';
     const crossingStartDist = 22.0;
     const crossingNearDist = 5.4;   // as close as we get before the dark
     const closeDist = 1.8;          // held through the passage
-    const arriveDist = 25.0;        // how far out we come up on the far side
+    // How far out we come up on the far side. Kept well under ORBIT_RADIUS in
+    // planet.js (55) — that margin is what guarantees the planet is always
+    // farther from the camera than the black hole, which is what the draw-order
+    // occlusion trick there depends on.
+    const arriveDist = 45.0;
     // Closest point of the fall, and the last frame of the journey. The black hole
     // subtends the same angle whatever the viewport, but portrait has far less
     // width for it to subtend that angle in — at the landscape distance it owns

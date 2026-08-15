@@ -1,8 +1,8 @@
 body {
   margin: 0;
   /* Scroll length is the journey's timeline. See JOURNEY in src/main.js — the
-     last phase ends at 20 viewport units, plus one unit of run-out. */
-  height: 2100vh;
+     last phase ends at 27 viewport units, plus one unit of run-out. */
+  height: 2800vh;
 }
 
 /* Covers the handover between the raymarched scene and the tunnel scene: fades

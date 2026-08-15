@@ -20,11 +20,11 @@ import * as THREE from 'three';
 const SEGMENTS = 64;
 
 // How far from the black hole the planet orbits. This has to stay comfortably
-// above the largest camera distance in the journey (25 at the arrival, see
-// JOURNEY in src/main.js) — that is what guarantees the planet is always further
-// from the camera than the black hole is, and so that the black hole can only
-// ever be in front of it. Also outside the star shell, which reaches r = 42.
-const ORBIT_RADIUS = 55.0;
+// above the largest camera distance in the journey (45 at the arrival, see
+// arriveDist in src/main.js) — that is what guarantees the planet is always
+// further from the camera than the black hole is, and so that the black hole can
+// only ever be in front of it. Also outside the star shell, which reaches r = 42.
+const ORBIT_RADIUS = 65.0;
 
 // Narrow enough that the planet stays round wherever it is placed. See the note
 // in update() — the raymarcher's own frustum is far too wide to draw a sphere
