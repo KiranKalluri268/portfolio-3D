@@ -530,11 +530,22 @@ import Lenis from 'lenis';
     const crossingStartDist = 22.0;
     const crossingNearDist = 5.4;   // as close as we get before the dark
     const closeDist = 1.8;          // held through the passage
-    // How far out we come up on the far side. Kept well under ORBIT_RADIUS in
-    // planet.js (55) — that margin is what guarantees the planet is always
-    // farther from the camera than the black hole, which is what the draw-order
-    // occlusion trick there depends on.
-    const arriveDist = 45.0;
+    // How far out we come up on the far side. Two ceilings on this number, both
+    // found the hard way.
+    //
+    // It has to stay well under ORBIT_RADIUS in planet.js (65) — that margin is
+    // what guarantees the planet is always farther from the camera than the black
+    // hole, which is what the draw-order occlusion trick there depends on.
+    //
+    // It also can't outrun the raymarcher's own step budget. NSTEPS*STEP is a
+    // fixed ray-path length per quality tier — on 'low' that's 280*0.16 = 44.8 —
+    // and a ray that has to bend its way around the photon sphere needs
+    // meaningfully more path length than the straight-line camera distance. Above
+    // roughly 43-44 units on 'low', the most-bent rays run out of steps before
+    // they complete, and the ring comes up with a wedge missing rather than
+    // closed. Measured empirically across all three tiers, at both a phone and a
+    // desktop aspect: complete from 43 down, visibly bitten into by 44.
+    const arriveDist = 42.0;
     // Closest point of the fall, and the last frame of the journey. The black hole
     // subtends the same angle whatever the viewport, but portrait has far less
     // width for it to subtend that angle in — at the landscape distance it owns
