@@ -597,10 +597,17 @@ import Lenis from 'lenis';
     // ever does from the camera approaching, and inward, which is backwards —
     // the rotation buried the parallax the approach was supposed to produce.
     //
-    // Nine degrees is what is left. Enough that the disk still opens up under the
-    // camera on the way in, little enough that the approach is what moves things.
-    const startElev = 14.0 * Math.PI / 180;
-    const endElev = 5.0 * Math.PI / 180;
+    // Six and a half degrees is what is left. Enough that the disk still opens up
+    // under the camera on the way in, little enough that the approach is what
+    // moves things.
+    //
+    // Lowered from 14/5. This is the angle between the disk plane and the line
+    // from the camera to the black hole, so dropping it lays the disk more
+    // edge-on and puts the camera nearer its plane. 2.5 at the end is deliberately
+    // just above the 2 degree floor CameraDragControls clamps to, so the scripted
+    // fall does not finish somewhere drag cannot follow it back to.
+    const startElev = 9.0 * Math.PI / 180;
+    const endElev = 2.5 * Math.PI / 180;
     // Roll. The reference frame is not shot level — the disk runs up to the right
     // across the whole width, which is what stops it reading as a horizon line
     // and starts it reading as a plane the camera happens to be near. Elevation
