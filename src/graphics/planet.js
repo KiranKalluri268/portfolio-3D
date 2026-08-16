@@ -110,12 +110,20 @@ const fragmentShader = /* glsl */ `
     float lambert = max(dot(n, normalize(uLightDir)), 0.0);
     // A little wrap so the terminator is a band rather than a hard edge, and a
     // floor so the night side is dark without being a hole in the sky.
-    float lighting = pow(lambert, 0.85) * 0.95 + 0.05;
+    //
+    // Kept far below full exposure. This body is tens of units out from the only
+    // source in the system and is seen against the disk's own glow, so a fully
+    // exposed globe reads as a foreground prop lit by something off-camera. What
+    // it should read as is a dark disc with a lit edge — scale reference, not a
+    // second subject.
+    float lighting = pow(lambert, 0.85) * 0.30 + 0.015;
 
     vec3 viewDir = normalize(cameraPosition - vWorldPos);
     float fresnel = pow(1.0 - max(dot(n, viewDir), 0.0), 3.0);
-    // Atmosphere tracks the light, so the limb glows on the lit side only.
-    vec3 atmosphere = uAtmosphere * fresnel * (0.25 + lambert * 1.35);
+    // Atmosphere tracks the light, so the limb glows on the lit side only. It
+    // carries most of what is visible now that the surface is held down, which is
+    // the right split: the limb is what separates the silhouette from the sky.
+    vec3 atmosphere = uAtmosphere * fresnel * (0.06 + lambert * 0.55);
 
     gl_FragColor = vec4(surface * lighting + atmosphere, 1.0);
   }
@@ -174,19 +182,30 @@ export function createPlanet(width, height) {
 
     // sx and sy are screen coordinates in [-1, 1], and the target is sampled by
     // screen position, so they land exactly. The black hole composes at sx = +0.5
-    // — see COMPOSE_SHIFT — and the planet arcs in above and left of it across the
-    // fall, toward a home position close enough to read as being in its system,
-    // clear enough of the disk not to be drawn over it.
+    // — see COMPOSE_SHIFT — and the planet sits above and left of it, moving
+    // *outward* from it across the fall.
     //
-    // How far in that home gets has to give way on a narrow viewport. The black
-    // hole is the same angular size either way, but portrait has far less width
-    // for it to be that size in, so by the last unit it owns most of the frame —
-    // and a planet that settles nicely beside it on desktop ends up buried behind
-    // it.
+    // Outward, because that is the direction the approach actually takes it. The
+    // planet holds a fixed distance from the black hole (ORBIT_RADIUS) while the
+    // camera closes from 42 units to around 5. Far out, the two distances are
+    // comparable and the planet appears close beside the black hole in the sky.
+    // Falling in, the black hole swells to fill the frame while the planet — no
+    // nearer than it was, and increasingly off to one side rather than ahead —
+    // opens up a wider and wider angle from it. It used to run the other way,
+    // starting at the edge and sliding inward, which is the parallax of a body
+    // being approached rather than one being passed.
+    //
+    // How far out it ends has to give way on a narrow viewport. The black hole is
+    // the same angular size either way, but portrait has far less width for it to
+    // be that size in, so by the last unit it owns most of the frame and the
+    // planet has to clear further to stay out from under it.
     const narrow = Math.min(1, Math.max(0, (1.2 - aspect) / 0.8));
-    const sxEnd = -0.10 - 0.48 * narrow;
-    const sxHome = -0.80 + (sxEnd + 0.80) * eased;
-    const syHome = 0.30 + 0.22 * Math.sin(Math.PI * (0.15 + 0.70 * eased));
+    const sxStart = -0.22;
+    const sxEnd = -0.70 - 0.18 * narrow;
+    const sxHome = sxStart + (sxEnd - sxStart) * eased;
+    // Rises as it draws out, so the drift is radial from the black hole rather
+    // than a flat slide across the frame.
+    const syHome = 0.16 + 0.26 * eased;
 
     // Revolves around that home point rather than sitting still on it, so it
     // reads as a body in orbit and not a cutout pasted beside the black hole. The
@@ -197,7 +216,7 @@ export function createPlanet(width, height) {
     // not wobble while still arcing in from the edge, and slow enough — one turn
     // every 46 seconds — to look orbital rather than jittery.
     const orbitAngle = time * ((2 * Math.PI) / 46);
-    const orbitAmountX = 0.10 * eased;
+    const orbitAmountX = 0.06 * eased;
     const orbitAmountY = orbitAmountX * 0.55; // foreshortened, as a tilted orbital plane would be
     const sx = sxHome + orbitAmountX * Math.cos(orbitAngle);
     const sy = syHome + orbitAmountY * Math.sin(orbitAngle);
@@ -228,19 +247,24 @@ export function createPlanet(width, height) {
     mesh.position.copy(observer.position).addScaledVector(placement, range);
 
     // Apparent size is radius over distance, so scaling by the distance just
-    // solved for keeps growth a straight function of progress rather than a side
-    // effect of the camera closing on the black hole.
+    // solved for makes the angular size a straight function of progress rather
+    // than a side effect of the camera closing on the black hole.
+    //
+    // Held flat and edging down, for the same reason the drift runs outward: the
+    // camera closes on the black hole, not on the planet, and the planet's own
+    // distance barely moves across the whole fall. It should not appear to grow.
+    // The slight fall is the small real one — the approach ends up slightly
+    // further from a body off to the side than it started.
     //
     // It is set against the vertical field of view, which on a tall narrow screen
-    // is most of the frame — left alone the planet grows until it crowds the black
-    // hole in portrait while still looking right on desktop, so it is held back a
-    // little as the viewport narrows.
+    // is most of the frame, so it is held back a little as the viewport narrows.
     //
-    // Kept well under the black hole's own scale — this is a body orbiting it, not
-    // a rival to it, and a planet reading as bigger than the thing it orbits reads
-    // as wrong at a glance regardless of the actual physics.
+    // Small in absolute terms. Against a black hole that owns most of the frame by
+    // the last unit, this is scale reference — the thing that says how big the
+    // other thing is — and it stops doing that job the moment it is large enough
+    // to read as a subject of its own.
     const framing = Math.min(1, 0.55 + 0.45 * aspect);
-    mesh.scale.setScalar(range * (0.028 + 0.015 * eased) * framing);
+    mesh.scale.setScalar(range * (0.016 - 0.003 * eased) * framing);
     mesh.rotation.y = progress * 0.35 + orbitAngle * 0.2 + 0.6;
 
     // Lit by the accretion disk, which is the only light in this system and sits
