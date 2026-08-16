@@ -105,7 +105,7 @@ const NARROW_ELEVATION_GAIN = 12.0 * Math.PI / 180;
 
 // World radius. Apparent size is this over the real distance and nothing else,
 // so it is set once and the fall does the rest.
-const PLANET_RADIUS = 0.36;
+const PLANET_RADIUS = 0.26;
 
 const DEG_TO_RAD = Math.PI / 180;
 
