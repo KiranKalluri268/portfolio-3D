@@ -338,23 +338,45 @@ void main()	{
     // ── The planet ────────────────────────────────────────────────────────
     // Composited alpha-over, and before the star field and the disk, because it
     // orbits further out than either — so both of those add over it, and only the
-    // black hole covers it. That last part is free: this whole block sits inside
-    // "distance > 1.0", which rays ending at the horizon never reach.
+    // black hole covers it. The block sits inside "distance > 1.0", so rays that
+    // end on the horizon never reach it and the shadow stays clean.
     //
-    // Sampled by screen position, so it lands exactly as its own camera drew it.
-    // The particle layers instead reconstruct a direction from the ray, which ties
-    // them to this shader's framing — the half-screen COMPOSE_SHIFT included,
-    // which is why they sample nothing across the left quarter of the screen.
-    // Stars survive that; a planet would be sliced down a hard vertical edge.
+    // Sampled along the BENT ray, the same as the star field, by reconstructing a
+    // screen position from the ray direction and reading the planet's target
+    // there. It used to be sampled at gl_FragCoord — straight down the unbent ray
+    // — and the difference is what the planet is allowed to do.
     //
-    // Screen space also keeps the planet out of this shader's very wide
-    // projection, where a sphere well off the axis comes out stretched by 1/cos of
-    // the angle — better than half again over toward the left of the frame. It
-    // buys that by not matching the scene's perspective exactly, which at this
-    // distance nothing can see.
+    // Straight, the planet had to be kept angularly clear of the shadow for the
+    // whole fall, because a straight ray aimed behind the black hole terminates at
+    // the horizon and never reaches this block: the planet would not be occluded
+    // so much as deleted. That clearance is a hard floor on how near the black
+    // hole it can be placed, and it is the reason the planet kept coming out
+    // further away than wanted.
+    //
+    // Bent, rays that pass close to the black hole curve around it rather than
+    // ending on it, so they find the planet even when it is geometrically behind.
+    // It goes where it likes: near the rim the image is pushed outward and drawn
+    // into an arc, which is the real behaviour, and directly behind it wraps the
+    // photon ring instead of vanishing.
+    //
+    // The inverse of the projection at the top of main(), COMPOSE_SHIFT included —
+    // which is the one thing the particle blocks below get to skip, since their
+    // cameras are centred. Skipping it there is why they sample nothing across the
+    // left quarter of the frame. A planet would be sliced down a hard vertical
+    // edge by that, so it is carried here.
     if (planet_amount > 0.0) {
-      vec4 planet = texture2D(planet_texture, gl_FragCoord.xy / resolution);
-      color.rgb = mix(color.rgb, planet.rgb, planet.a * planet_amount);
+      vec3 planet_dir = show_lensing ? normalize(point - oldpoint) : orig_ray_dir;
+      float planet_fwd = dot(planet_dir, forward);
+      if (planet_fwd > 0.0) {
+        float planet_aspect = resolution.x / resolution.y;
+        float planet_x = dot(planet_dir, nright) / (planet_fwd * uvfov * planet_aspect) + COMPOSE_SHIFT;
+        float planet_y = dot(planet_dir, up) / (planet_fwd * uvfov);
+        vec2 planet_uv = vec2(planet_x, planet_y) * 0.5 + 0.5;
+        if (planet_uv.x > 0.0 && planet_uv.x < 1.0 && planet_uv.y > 0.0 && planet_uv.y < 1.0) {
+          vec4 planet = texture2D(planet_texture, planet_uv);
+          color.rgb = mix(color.rgb, planet.rgb, planet.a * planet_amount);
+        }
+      }
     }
 
     // ── Screen-space lensed particles (Option B) ──────────────────────────

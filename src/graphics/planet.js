@@ -10,12 +10,14 @@ import * as THREE from 'three';
 // this target is composited alpha-over: the material writes an opaque alpha and
 // the target is cleared to a transparent one.
 //
-// And the stars are sampled along the bent ray, where the planet is sampled along
-// the straight one. Bending it is more nearly correct, and does produce a second
-// lensed image of the planet beside the black hole — but that image reads as a
-// detached sliver rather than as physics, and the bending visibly warps the planet
-// itself. Both are worst in portrait, where the black hole fills much more of the
-// frame.
+// Both are sampled along the bent ray. The planet was on the straight one for a
+// long time, because bending it warped the sphere and threw off a second lensed
+// image that read as a detached sliver rather than as physics — both worst in
+// portrait, where the black hole fills much more of the frame. That was at three
+// times this size and five times this orbit radius. Small and near, the warp is
+// invisible and the second image is the point rather than the cost: it is what
+// lets the planet sit against the black hole instead of having to stay clear of
+// it. See the planet block in fragmentShader.glsl.
 
 const SEGMENTS = 64;
 
