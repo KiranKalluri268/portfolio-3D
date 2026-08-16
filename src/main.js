@@ -269,11 +269,22 @@ import Lenis from 'lenis';
 
   // Somewhere to arrive. Rendered to its own target and sampled by the shader —
   // see src/graphics/planet.js for why it does not share the particle ones.
-  const {
-    planetScene, planetTarget, planetCamera,
-    updatePlanet, resetPlanetAnchor, resizePlanetTarget, disposePlanet
-  } = createPlanet(window.innerWidth, window.innerHeight);
-  uniforms.planet_texture.value = planetTarget.texture;
+  //
+  // Unmounted. The placement is settled and the lensed compositing works, but the
+  // last pass put the planet low enough to graze the accretion disk and near
+  // enough that the end of the fall is governed by the photon ring rather than by
+  // where the planet is anchored — neither of which has been looked at yet. See
+  // status.md for where it was left and what the open questions are.
+  //
+  // Nothing is deleted or unwired. This flag is the whole of it: false and the
+  // target is never created, never drawn, and planet_amount stays at 0 so the
+  // shader's planet block never runs. True puts it back exactly as it was.
+  const PLANET_ENABLED = false;
+
+  const planet = PLANET_ENABLED
+    ? createPlanet(window.innerWidth, window.innerHeight)
+    : null;
+  if (planet) uniforms.planet_texture.value = planet.planetTarget.texture;
   ready.then(() => {
     uniforms.bg_texture.value = textures.get('bg1')
     uniforms.star_texture.value = textures.get('star')
@@ -330,7 +341,7 @@ import Lenis from 'lenis';
     composer.setPixelRatio(pixelRatio)
     composer.setSize(window.innerWidth, window.innerHeight)
     resizeParticleTargets(renderWidth, renderHeight)
-    resizePlanetTarget(renderWidth, renderHeight)
+    planet?.resizePlanetTarget(renderWidth, renderHeight)
     resizeTunnel(window.innerWidth / window.innerHeight)
     uniforms.resolution.value.set(renderWidth, renderHeight)
   }
@@ -696,19 +707,21 @@ import Lenis from 'lenis';
     // advanced, because it is positioned from the camera's own basis and would
     // otherwise sit a frame behind the camera it is framed against.
     const planetProgress = approachProgress
-    uniforms.planet_amount.value = pastTunnel ? smoothstep(clamp01(planetProgress / 0.22)) : 0
+    uniforms.planet_amount.value = planet && pastTunnel
+      ? smoothstep(clamp01(planetProgress / 0.22))
+      : 0
     // Placed on every frame past the tunnel, not only on the ones it is visible
     // for. Gating the placement on the same flag as the draw left the mesh
     // wherever it was last put — including its initial position at the origin —
     // so the first frame after it faded up could sample a planet still sitting
     // inside the black hole.
-    if (pastTunnel) {
-      updatePlanet(planetProgress, observer, window.innerWidth / window.innerHeight, time)
-    } else {
+    if (planet && pastTunnel) {
+      planet.updatePlanet(planetProgress, observer, window.innerWidth / window.innerHeight, time)
+    } else if (planet) {
       // Scrolled back off the fall. Drop the anchor so coming back down aims a
       // fresh one — the camera's azimuth keeps drifting up in the tunnel, and a
       // point fixed against where it used to be would be off the edge on return.
-      resetPlanetAnchor()
+      planet.resetPlanetAnchor()
     }
 
     // update shader variables
@@ -750,15 +763,15 @@ import Lenis from 'lenis';
 
     // Only drawn once there is something to draw, so the approach and the
     // passage pay nothing for it.
-    if (uniforms.planet_amount.value > 0) {
+    if (planet && uniforms.planet_amount.value > 0) {
       // The renderer's clear alpha is 1, which is right for the particle targets
       // because they composite additively and their alpha is never read. This one
       // is composited alpha-over, so clearing it opaque would paint a black frame
       // across the whole sky. Cleared transparent, and put back afterwards.
       renderer.setClearAlpha(0)
-      renderer.setRenderTarget(planetTarget)
+      renderer.setRenderTarget(planet.planetTarget)
       renderer.clear()
-      renderer.render(planetScene, planetCamera)
+      renderer.render(planet.planetScene, planet.planetCamera)
       renderer.setClearAlpha(1)
     }
 
@@ -887,7 +900,7 @@ import Lenis from 'lenis';
     storyOverlay.dispose();
     disposeParticleSystem();
     disposeTunnel();
-    disposePlanet();
+    planet?.disposePlanet();
     disposeShaderPlane();
     disposeScene();
     disposeTextures();
