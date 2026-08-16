@@ -75,11 +75,12 @@ const COMPOSE_SHIFT = 0.5;
 // either side — but it is the floor. Lower and it spends the arrival under the
 // near-side arc instead of against open sky.
 //
-// Both are picked backwards from the last frame, which is where the margin is.
-// The shadow grows eightfold across the fall while the separation grows nothing
-// like as fast, so the planet is at its most crowded right at the end. Measured
-// on a 1888 by 820 frame: the shadow finishes at about 246 pixels of radius and
-// the planet's near edge sits some 50 outside it.
+// Both used to be picked backwards from the last frame, where the planet had to
+// clear the shadow or be deleted by it. Sampling along the bent ray removed that
+// — see the planet block in fragmentShader.glsl — and this is what was spent on
+// it. The planet now finishes the fall at about 0.94 of the shadow radius, which
+// is to say geometrically just behind the rim, and lensing carries the image
+// back out to sit against the ring rather than disappear into it.
 //
 // Which is why the two are traded against each other rather than set apart. The
 // pair carries a total angular offset, and only the total has to clear the
@@ -94,7 +95,7 @@ const COMPOSE_SHIFT = 0.5;
 // two move together: the radius sets how near the axis the planet is while the
 // black hole is still far away, the angles set where it ends up once the black
 // hole fills the frame, and only a small radius with wide angles gets both.
-const ANCHOR_AZIMUTH_OFFSET = 52.0 * Math.PI / 180;
+const ANCHOR_AZIMUTH_OFFSET = 38.0 * Math.PI / 180;
 const ANCHOR_ELEVATION = 12.0 * Math.PI / 180;
 
 // What a narrow viewport gives back. At the wide split the planet finishes about
