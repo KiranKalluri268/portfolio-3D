@@ -67,20 +67,26 @@ const COMPOSE_SHIFT = 0.5;
 // slowly than the thing being fallen into. The small offset on top takes it off
 // the exact axis and puts it to one side.
 //
-// Elevation is absolute, measured from the disk plane, and it is what sets how
-// high the planet rides. The camera runs 14 to 5 degrees above that plane, so at
-// 12 the planet opens the fall marginally below the camera and finishes above
-// it, crossing the view plane on the way in rather than staying over it. Which
-// is fine — the disk is edge-on from up there and the planet passes clear of it
-// either side — but it is the floor. Lower and it spends the arrival under the
-// near-side arc instead of against open sky.
+// Elevation is absolute, measured from the disk plane. The camera runs 14 to 5
+// degrees above that plane, so at 5.4 the planet sits below the camera for most
+// of the fall and only just above it at the end — close to edge-on with the disk
+// the whole way. That is low, and it is the one thing here worth a second look:
+// the planet passes near the near-side arc rather than reading against open sky,
+// and it is only outside the disk at all because the disk stops at r = 6 and the
+// orbit is at 12.
 //
-// Both used to be picked backwards from the last frame, where the planet had to
-// clear the shadow or be deleted by it. Sampling along the bent ray removed that
-// — see the planet block in fragmentShader.glsl — and this is what was spent on
-// it. The planet now finishes the fall at about 0.94 of the shadow radius, which
-// is to say geometrically just behind the rim, and lensing carries the image
-// back out to sit against the ring rather than disappear into it.
+// Both were picked backwards from the last frame, where the planet used to have
+// to clear the shadow or be deleted by it. Sampling along the bent ray removed
+// that — see the planet block in fragmentShader.glsl — so the offset that was
+// buying clearance now buys nearness instead. Halved from 38/12, the pair that
+// first followed the lensing change, which keeps the bearing and halves the
+// distance.
+//
+// Which puts the planet a long way inside the shadow geometrically by the end,
+// at about 0.42 of its radius. It will not appear there. Lensing displaces an
+// image outward, and an object that far behind the rim comes back out pinned to
+// the photon ring — so the last of the fall converges on the ring wherever the
+// planet is put, and this number stops meaning much before it gets there.
 //
 // Which is why the two are traded against each other rather than set apart. The
 // pair carries a total angular offset, and only the total has to clear the
@@ -95,16 +101,16 @@ const COMPOSE_SHIFT = 0.5;
 // two move together: the radius sets how near the axis the planet is while the
 // black hole is still far away, the angles set where it ends up once the black
 // hole fills the frame, and only a small radius with wide angles gets both.
-const ANCHOR_AZIMUTH_OFFSET = 38.0 * Math.PI / 180;
-const ANCHOR_ELEVATION = 12.0 * Math.PI / 180;
+const ANCHOR_AZIMUTH_OFFSET = 17.0 * Math.PI / 180;
+const ANCHOR_ELEVATION = 5.4 * Math.PI / 180;
 
 // What a narrow viewport gives back. At the wide split the planet finishes about
 // 0.86 of the way to the left edge on a phone, near enough to walking off it, and
 // four more degrees of azimuth does walk it off. Portrait has the height instead,
 // so the offset moves back into elevation — which is the landscape split from
 // before this, and measures the same clearance it did.
-const NARROW_AZIMUTH_GIVE = 8.0 * Math.PI / 180;
-const NARROW_ELEVATION_GAIN = 12.0 * Math.PI / 180;
+const NARROW_AZIMUTH_GIVE = 3.6 * Math.PI / 180;
+const NARROW_ELEVATION_GAIN = 5.4 * Math.PI / 180;
 
 // World radius. Apparent size is this over the real distance and nothing else,
 // so it is set once and the fall does the rest.
