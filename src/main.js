@@ -530,22 +530,28 @@ import Lenis from 'lenis';
     const crossingStartDist = 22.0;
     const crossingNearDist = 5.4;   // as close as we get before the dark
     const closeDist = 1.8;          // held through the passage
-    // How far out we come up on the far side. Two ceilings on this number, both
-    // found the hard way.
+    // How far out we come up on the far side.
     //
-    // It has to stay well under ORBIT_RADIUS in planet.js (65) — that margin is
-    // what guarantees the planet is always farther from the camera than the black
-    // hole, which is what the draw-order occlusion trick there depends on.
+    // 30 rather than the 42 it was, so the black hole is already something on the
+    // first frame past the passage instead of a bright speck — its shadow comes up
+    // at about 45 pixels of radius on a 1888 by 820 frame where it used to be 32.
+    // The fall gives up a third of its distance for that, 37 units down to 25,
+    // over the same 14 units of scroll.
     //
-    // It also can't outrun the raymarcher's own step budget. NSTEPS*STEP is a
-    // fixed ray-path length per quality tier — on 'low' that's 280*0.16 = 44.8 —
-    // and a ray that has to bend its way around the photon sphere needs
-    // meaningfully more path length than the straight-line camera distance. Above
-    // roughly 43-44 units on 'low', the most-bent rays run out of steps before
-    // they complete, and the ring comes up with a wedge missing rather than
-    // closed. Measured empirically across all three tiers, at both a phone and a
-    // desktop aspect: complete from 43 down, visibly bitten into by 44.
-    const arriveDist = 42.0;
+    // The ceiling on this is the raymarcher's step budget. NSTEPS*STEP is a fixed
+    // ray-path length per quality tier — on 'low' that's 280*0.16 = 44.8 — and a
+    // ray that has to bend its way around the photon sphere needs meaningfully
+    // more path length than the straight-line camera distance. Above roughly 43-44
+    // units on 'low', the most-bent rays run out of steps before they complete and
+    // the ring comes up with a wedge missing rather than closed. Measured across
+    // all three tiers at both a phone and a desktop aspect: complete from 43 down,
+    // visibly bitten into by 44. Coming down to 30 leaves that with room to spare.
+    //
+    // The floor is the planet. ORBIT_RADIUS in planet.js is 12, and the planet is
+    // anchored beyond the black hole, so camera-to-planet leads camera-to-black-
+    // hole by about 8 units here — that lead is what the draw-order occlusion
+    // trick depends on, and it narrows as this number climbs, not as it falls.
+    const arriveDist = 30.0;
     // Closest point of the fall, and the last frame of the journey. The black hole
     // subtends the same angle whatever the viewport, but portrait has far less
     // width for it to subtend that angle in — at the landscape distance it owns

@@ -41,9 +41,9 @@ const SEGMENTS = 64;
 // background block, which rays terminating at the horizon never reach, so the
 // black hole covers whatever is behind it and nothing else does — free, and
 // correct only while the planet really is the further of the two. Anchored
-// beyond the black hole, camera-to-planet runs about 51 down to 16 against a
-// camera-to-black-hole 42 down to 5. It holds, but the margin at the arrival is
-// only about 9 units, so this should not go much below 12.
+// beyond the black hole, camera-to-planet runs about 38 down to 16 against a
+// camera-to-black-hole 30 down to 5. It holds, but the margin never gets above
+// about 10 units, so this should not go much below 12.
 //
 // It used to be 65, outside the star shell. Inside it now, which changes
 // nothing: the particle layers add over the planet rather than depth-testing
