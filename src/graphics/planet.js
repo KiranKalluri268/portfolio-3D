@@ -66,10 +66,12 @@ const COMPOSE_SHIFT = 0.5;
 // the exact axis and puts it to one side.
 //
 // Elevation is absolute, measured from the disk plane, and it is what sets how
-// high the planet rides. The camera runs 14 to 5 degrees above that plane, so
-// much under about 15 degrees comes out level with the disk or beneath it. 24
-// keeps it clear of the near-side arc, reading against empty sky, without
-// sitting up near the top of the frame the way 32 did.
+// high the planet rides. The camera runs 14 to 5 degrees above that plane, so at
+// 12 the planet opens the fall marginally below the camera and finishes above
+// it, crossing the view plane on the way in rather than staying over it. Which
+// is fine — the disk is edge-on from up there and the planet passes clear of it
+// either side — but it is the floor. Lower and it spends the arrival under the
+// near-side arc instead of against open sky.
 //
 // Both are picked backwards from the last frame, which is where the margin is.
 // The shadow grows eightfold across the fall while the separation grows nothing
@@ -90,8 +92,16 @@ const COMPOSE_SHIFT = 0.5;
 // two move together: the radius sets how near the axis the planet is while the
 // black hole is still far away, the angles set where it ends up once the black
 // hole fills the frame, and only a small radius with wide angles gets both.
-const ANCHOR_AZIMUTH_OFFSET = 44.0 * Math.PI / 180;
-const ANCHOR_ELEVATION = 24.0 * Math.PI / 180;
+const ANCHOR_AZIMUTH_OFFSET = 52.0 * Math.PI / 180;
+const ANCHOR_ELEVATION = 12.0 * Math.PI / 180;
+
+// What a narrow viewport gives back. At the wide split the planet finishes about
+// 0.86 of the way to the left edge on a phone, near enough to walking off it, and
+// four more degrees of azimuth does walk it off. Portrait has the height instead,
+// so the offset moves back into elevation — which is the landscape split from
+// before this, and measures the same clearance it did.
+const NARROW_AZIMUTH_GIVE = 8.0 * Math.PI / 180;
+const NARROW_ELEVATION_GAIN = 12.0 * Math.PI / 180;
 
 // World radius. Apparent size is this over the real distance and nothing else,
 // so it is set once and the fall does the rest.
@@ -316,11 +326,24 @@ export function createPlanet(width, height) {
       // else does. Holding it further from the black hole than the camera ever
       // gets means it is always the further of the two, so "behind" is the only
       // case that can arise and the free occlusion is always the correct one.
-      const azimuth = observer.theta + Math.PI + ANCHOR_AZIMUTH_OFFSET;
-      const cosElevation = Math.cos(ANCHOR_ELEVATION);
+      //
+      // How the offset is split between the two depends on the viewport, and it
+      // has to. Only the total has to clear the shadow, so the split is free —
+      // but it is spent against whichever axis of the frame has room, and which
+      // axis that is flips. A wide viewport has width to spare and no height, so
+      // the offset goes mostly sideways and the planet rides low. A phone has the
+      // reverse, and the same wide azimuth walks it off the left edge, so the
+      // offset moves back into elevation and the planet rides high. Same total,
+      // same clearance, opposite framing.
+      const narrow = Math.min(1, Math.max(0, (1.2 - aspect) / 0.8));
+      const azimuthOffset = ANCHOR_AZIMUTH_OFFSET - NARROW_AZIMUTH_GIVE * narrow;
+      const elevation = ANCHOR_ELEVATION + NARROW_ELEVATION_GAIN * narrow;
+
+      const azimuth = observer.theta + Math.PI + azimuthOffset;
+      const cosElevation = Math.cos(elevation);
       anchor.set(
         ORBIT_RADIUS * cosElevation * Math.sin(azimuth),
-        ORBIT_RADIUS * Math.sin(ANCHOR_ELEVATION),
+        ORBIT_RADIUS * Math.sin(elevation),
         ORBIT_RADIUS * cosElevation * Math.cos(azimuth),
       );
       anchored = true;
