@@ -570,16 +570,19 @@ import Lenis from 'lenis';
     // running off both edges. Backed off in proportion to how narrow it is.
     const viewportAspect = Math.max(window.innerWidth / window.innerHeight, 0.4);
     const narrowFraming = clamp01((1.2 - viewportAspect) / 0.8);
-    // 5.1 put the shadow at 0.56 of the frame height across. The reference is
-    // 0.39 — the black hole is a good deal smaller in frame than ours was, which
-    // is most of what made the two shots read differently. Backed off to suit.
+    // Sized against the reference frame, in units of frame height across the
+    // photon ring. Deliberately the ring and not the visible black: the disk
+    // crosses in front of the shadow at the bottom and its far side arcs over
+    // the top, so the black that survives is a lens narrower than the object
+    // casting it, and by a different amount in every frame. Measuring that
+    // instead is what put this at 7.2 and left the whole disk sitting inside the
+    // frame with sky all round it, where the reference runs off both edges.
     //
-    // Solved rather than guessed. The shadow's angular radius is
+    // Reference ring is 0.51. Solved rather than guessed: the angular radius is
     // sin(t) = 3*sqrt(3)*M/d * sqrt(1 - 2M/d), M = 0.5 here (horizon at r = 1,
-    // critical impact parameter 2.598 — the 2.6 quoted in status.md). Calibrated
-    // against the 0.564 measured off the last screenshot at 5.1, 0.39 lands at
-    // 7.2. Still well inside arriveDist, so the fall is shortened, not inverted.
-    const blackHoleDist = 7.2 * (1.0 + 0.55 * narrowFraming);
+    // critical impact parameter 2.598 — the 2.6 quoted in status.md). Against
+    // two measured points, 0.564 at 5.1 and 0.384 at 7.2, that puts 0.51 at 5.6.
+    const blackHoleDist = 5.6 * (1.0 + 0.55 * narrowFraming);
     // Nothing swings edge-on across the crossing, so the elevation only decides
     // how much of the star field sits above the horizon. Held flat: the whole
     // point of this half is that it is a straight line in.
