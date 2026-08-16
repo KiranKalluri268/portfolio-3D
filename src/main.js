@@ -570,19 +570,22 @@ import Lenis from 'lenis';
     // running off both edges. Backed off in proportion to how narrow it is.
     const viewportAspect = Math.max(window.innerWidth / window.innerHeight, 0.4);
     const narrowFraming = clamp01((1.2 - viewportAspect) / 0.8);
-    // Sized against the reference frame, in units of frame height across the
-    // photon ring. Deliberately the ring and not the visible black: the disk
-    // crosses in front of the shadow at the bottom and its far side arcs over
-    // the top, so the black that survives is a lens narrower than the object
-    // casting it, and by a different amount in every frame. Measuring that
-    // instead is what put this at 7.2 and left the whole disk sitting inside the
-    // frame with sky all round it, where the reference runs off both edges.
+    // Closest approach, and what sets how big the black hole ends up in frame.
+    // Settled by rendering the last frame headlessly and laying it beside the
+    // reference scaled to the same height, rather than by measuring the
+    // reference on its own — see the note on COMPOSE_SHIFT in the shader for why
+    // that file does not survive being thresholded.
     //
-    // Reference ring is 0.51. Solved rather than guessed: the angular radius is
-    // sin(t) = 3*sqrt(3)*M/d * sqrt(1 - 2M/d), M = 0.5 here (horizon at r = 1,
-    // critical impact parameter 2.598 — the 2.6 quoted in status.md). Against
-    // two measured points, 0.564 at 5.1 and 0.384 at 7.2, that puts 0.51 at 5.6.
-    const blackHoleDist = 5.6 * (1.0 + 0.55 * narrowFraming);
+    // Reference shadow is about 0.76 of the frame height across. Measured here:
+    // 0.48 at 5.6, 0.71 at 4.2. Sits a little under the reference, and far
+    // closer than anything before it.
+    //
+    // Note this is inside the disk's outer edge (DISK_WIDTH puts that at r = 6),
+    // so the near side of the disk passes between the camera and the black hole
+    // and fills the bottom of the frame. The reference is shot from outside its
+    // disk, which is why its lower left recedes into dark where ours is a bright
+    // slab. Closing that is a disk-extent change, not a camera one.
+    const blackHoleDist = 4.2 * (1.0 + 0.55 * narrowFraming);
     // Nothing swings edge-on across the crossing, so the elevation only decides
     // how much of the star field sits above the horizon. Held flat: the whole
     // point of this half is that it is a straight line in.

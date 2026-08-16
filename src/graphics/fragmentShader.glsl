@@ -23,14 +23,18 @@ const float TEMPERATURE_RANGE = 39000.0;
 // mirrors this when it aims the planet at a screen position, and must be changed
 // with it.
 //
-// Measured off the reference frame: the shadow centres at 0.67 of the width,
-// which is 0.34 half-screens right of the middle. It was 0.5 (three quarters
-// across), which crowded the right edge — the reference leaves the disk room to
-// run out past the black hole rather than off the frame.
+// Measured off the reference frame with the two scaled to a common height: the
+// shadow centres at 0.80 of the width, which is 0.60 half-screens right of the
+// middle. The disk runs out to the left of it and off the right edge behind it.
+//
+// The 0.67 this was briefly set to came from reading the JPEG directly, and the
+// reading was wrong — the reference is graded, glow fills the shadow, and no
+// threshold separates the two cleanly. Compare renders against it by eye at a
+// matched height; do not trust a number taken off that file alone.
 //
 // Applied before the aspect scaling, so this is a fraction of the width and the
 // composition holds its proportions on any viewport.
-const float COMPOSE_SHIFT = 0.34;
+const float COMPOSE_SHIFT = 0.60;
 
 uniform bool accretion_disk;
 uniform bool use_disk_texture;
