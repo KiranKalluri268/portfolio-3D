@@ -56,7 +56,8 @@ const ORBIT_RADIUS = 12.0;
 // sideways so the black hole composes off to the right instead of dead centre.
 // The planet is sampled by screen position, so its camera has to carry the same
 // shift or the two disagree about where a direction lands.
-const COMPOSE_SHIFT = 0.60;
+const COMPOSE_SHIFT = 0.67;
+const COMPOSE_SHIFT_Y = 0.26;
 
 // Where the planet is put, the first frame of the fall.
 //
@@ -259,8 +260,8 @@ export function createPlanet(width, height) {
     camera.projectionMatrix.makePerspective(
       (-1 - COMPOSE_SHIFT) * halfWidth,
       (1 - COMPOSE_SHIFT) * halfWidth,
-      halfHeight,
-      -halfHeight,
+      (1 - COMPOSE_SHIFT_Y) * halfHeight,
+      (-1 - COMPOSE_SHIFT_Y) * halfHeight,
       camera.near,
       camera.far,
     );

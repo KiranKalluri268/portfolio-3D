@@ -576,16 +576,19 @@ import Lenis from 'lenis';
     // reference on its own — see the note on COMPOSE_SHIFT in the shader for why
     // that file does not survive being thresholded.
     //
-    // Reference shadow is about 0.76 of the frame height across. Measured here:
-    // 0.48 at 5.6, 0.71 at 4.2. Sits a little under the reference, and far
-    // closer than anything before it.
+    // The reference does not show a whole black hole — its shadow is about 0.97
+    // of the frame height across and centred high and right, so the top and the
+    // right of the circle are off frame and the disk covers most of the rest.
+    // Measured here, full diameter: 0.48 at 5.6, 0.71 at 4.2, 1.37 at 3.1. That
+    // is a steep curve, close to the inverse square of the distance, so small
+    // steps in here move the frame a long way. 3.6 lands on 0.97.
     //
     // Note this is inside the disk's outer edge (DISK_WIDTH puts that at r = 6),
     // so the near side of the disk passes between the camera and the black hole
     // and fills the bottom of the frame. The reference is shot from outside its
     // disk, which is why its lower left recedes into dark where ours is a bright
     // slab. Closing that is a disk-extent change, not a camera one.
-    const blackHoleDist = 4.2 * (1.0 + 0.55 * narrowFraming);
+    const blackHoleDist = 3.6 * (1.0 + 0.55 * narrowFraming);
     // Nothing swings edge-on across the crossing, so the elevation only decides
     // how much of the star field sits above the horizon. Held flat: the whole
     // point of this half is that it is a straight line in.

@@ -23,18 +23,34 @@ const float TEMPERATURE_RANGE = 39000.0;
 // mirrors this when it aims the planet at a screen position, and must be changed
 // with it.
 //
-// Measured off the reference frame with the two scaled to a common height: the
-// shadow centres at 0.80 of the width, which is 0.60 half-screens right of the
-// middle. The disk runs out to the left of it and off the right edge behind it.
+// Fitted off the reference with the two scaled to a common height: its shadow
+// centres at 0.836 of the width, which is 0.67 half-screens right of the middle,
+// far enough that the circle runs off the right edge. The disk runs out to the
+// left of it.
 //
-// The 0.67 this was briefly set to came from reading the JPEG directly, and the
-// reading was wrong — the reference is graded, glow fills the shadow, and no
-// threshold separates the two cleanly. Compare renders against it by eye at a
-// matched height; do not trust a number taken off that file alone.
+// Earlier values here came from thresholding the JPEG directly and were wrong
+// twice — it is graded, glow fills the shadow, and no threshold separates the
+// two. Compare renders against it by eye at a matched height; do not trust a
+// number taken off that file alone.
 //
 // Applied before the aspect scaling, so this is a fraction of the width and the
 // composition holds its proportions on any viewport.
-const float COMPOSE_SHIFT = 0.60;
+const float COMPOSE_SHIFT = 0.67;
+
+// The same thing vertically, in half-screens up. The reference does not show a
+// whole black hole: its shadow centres above the top third and runs off the top
+// and right edges, so what is in frame is the lower left of the circle with the
+// disk crossing the rest. Centred vertically that cannot happen at any distance —
+// the shadow grows symmetrically and meets both edges at once — which is why this
+// exists rather than the distance being pushed further in.
+//
+// Fitting the reference's arc gives its centre 0.27 of the way down a frame whose
+// middle is 0.5 — 0.46 half-screens up. That is too much here and 0.26 is what
+// was kept, because this camera ends up inside the disk's outer edge where the
+// reference's is outside it: lifting the frame puts more near-side disk under the
+// black hole rather than the empty dark the reference has there, and by 0.46 the
+// bottom half of the frame is nothing else.
+const float COMPOSE_SHIFT_Y = 0.26;
 
 uniform bool accretion_disk;
 uniform bool use_disk_texture;
@@ -187,11 +203,13 @@ void main()	{
   float uvfov = tan(fov / 2.0 * DEG_TO_RAD);
   vec2 uv = square_frame(resolution);
 
-  // Off-center projection: shift black hole to 3/4 horizontal position.
-  // uv.x is in [-1, +1]; subtracting COMPOSE_SHIFT moves the "center" (black hole)
-  // to x=0.5 (75% from left). Anything rendered to an offscreen target and sampled
-  // back by ray direction has to know about this shift — see the planet block.
+  // Off-center projection: put the black hole up and to the right rather than in
+  // the middle. uv is in [-1, +1] on both axes, so subtracting a shift moves the
+  // "center" (the black hole) by that much in half-screens. Anything rendered to
+  // an offscreen target and sampled back by ray direction has to know about both
+  // shifts — see the planet block.
   uv.x -= COMPOSE_SHIFT;
+  uv.y -= COMPOSE_SHIFT_Y;
 
   uv *= vec2(resolution.x/resolution.y, 1.0);
   vec3 forward = normalize(cam_dir); // 
@@ -382,7 +400,7 @@ void main()	{
       if (planet_fwd > 0.0) {
         float planet_aspect = resolution.x / resolution.y;
         float planet_x = dot(planet_dir, nright) / (planet_fwd * uvfov * planet_aspect) + COMPOSE_SHIFT;
-        float planet_y = dot(planet_dir, up) / (planet_fwd * uvfov);
+        float planet_y = dot(planet_dir, up) / (planet_fwd * uvfov) + COMPOSE_SHIFT_Y;
         vec2 planet_uv = vec2(planet_x, planet_y) * 0.5 + 0.5;
         if (planet_uv.x > 0.0 && planet_uv.x < 1.0 && planet_uv.y > 0.0 && planet_uv.y < 1.0) {
           vec4 planet = texture2D(planet_texture, planet_uv);
