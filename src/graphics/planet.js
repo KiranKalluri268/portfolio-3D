@@ -56,7 +56,7 @@ const ORBIT_RADIUS = 12.0;
 // sideways so the black hole composes three quarters of the way across instead
 // of dead centre. The planet is sampled by screen position, so its camera has to
 // carry the same shift or the two disagree about where a direction lands.
-const COMPOSE_SHIFT = 0.5;
+const COMPOSE_SHIFT = 0.34;
 
 // Where the planet is put, the first frame of the fall.
 //

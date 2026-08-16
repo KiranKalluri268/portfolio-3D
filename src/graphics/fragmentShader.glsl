@@ -19,10 +19,18 @@ const float MIN_TEMPERATURE = 1000.0;
 const float TEMPERATURE_RANGE = 39000.0;
 
 // How far left of centre the rays are aimed, in half-screens, so the object being
-// orbited sits at 3/4 width instead of in the middle. src/graphics/planet.js
+// orbited sits off to the right instead of in the middle. src/graphics/planet.js
 // mirrors this when it aims the planet at a screen position, and must be changed
 // with it.
-const float COMPOSE_SHIFT = 0.5;
+//
+// Measured off the reference frame: the shadow centres at 0.67 of the width,
+// which is 0.34 half-screens right of the middle. It was 0.5 (three quarters
+// across), which crowded the right edge — the reference leaves the disk room to
+// run out past the black hole rather than off the frame.
+//
+// Applied before the aspect scaling, so this is a fraction of the width and the
+// composition holds its proportions on any viewport.
+const float COMPOSE_SHIFT = 0.34;
 
 uniform bool accretion_disk;
 uniform bool use_disk_texture;

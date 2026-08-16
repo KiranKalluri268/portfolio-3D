@@ -570,7 +570,16 @@ import Lenis from 'lenis';
     // running off both edges. Backed off in proportion to how narrow it is.
     const viewportAspect = Math.max(window.innerWidth / window.innerHeight, 0.4);
     const narrowFraming = clamp01((1.2 - viewportAspect) / 0.8);
-    const blackHoleDist = 5.1 * (1.0 + 0.55 * narrowFraming);
+    // 5.1 put the shadow at 0.56 of the frame height across. The reference is
+    // 0.39 — the black hole is a good deal smaller in frame than ours was, which
+    // is most of what made the two shots read differently. Backed off to suit.
+    //
+    // Solved rather than guessed. The shadow's angular radius is
+    // sin(t) = 3*sqrt(3)*M/d * sqrt(1 - 2M/d), M = 0.5 here (horizon at r = 1,
+    // critical impact parameter 2.598 — the 2.6 quoted in status.md). Calibrated
+    // against the 0.564 measured off the last screenshot at 5.1, 0.39 lands at
+    // 7.2. Still well inside arriveDist, so the fall is shortened, not inverted.
+    const blackHoleDist = 7.2 * (1.0 + 0.55 * narrowFraming);
     // Nothing swings edge-on across the crossing, so the elevation only decides
     // how much of the star field sits above the horizon. Held flat: the whole
     // point of this half is that it is a straight line in.
