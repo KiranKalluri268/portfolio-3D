@@ -271,7 +271,7 @@ import Lenis from 'lenis';
   // see src/graphics/planet.js for why it does not share the particle ones.
   const {
     planetScene, planetTarget, planetCamera,
-    updatePlanet, resizePlanetTarget, disposePlanet
+    updatePlanet, resetPlanetAnchor, resizePlanetTarget, disposePlanet
   } = createPlanet(window.innerWidth, window.innerHeight);
   uniforms.planet_texture.value = planetTarget.texture;
   ready.then(() => {
@@ -558,7 +558,16 @@ import Lenis from 'lenis';
     // how much of the star field sits above the horizon. Held flat: the whole
     // point of this half is that it is a straight line in.
     const crossingElev = 15.0 * Math.PI / 180;
-    const startElev = 60.0 * Math.PI / 180;
+    // The fall used to open 60 degrees above the disk plane and settle to 5, a
+    // 55 degree rotation across the shot. That had to come down once the planet
+    // became a fixed point in the world rather than a scripted screen position:
+    // a body out at ORBIT_RADIUS swings further from the camera turning than it
+    // ever does from the camera approaching, and inward, which is backwards —
+    // the rotation buried the parallax the approach was supposed to produce.
+    //
+    // Nine degrees is what is left. Enough that the disk still opens up under the
+    // camera on the way in, little enough that the approach is what moves things.
+    const startElev = 14.0 * Math.PI / 180;
     const endElev = 5.0 * Math.PI / 180;
 
     const crossingProgress = clamp01(scrollViewportUnits / JOURNEY.crossingEnd);
@@ -647,7 +656,14 @@ import Lenis from 'lenis';
     // That dive is gone — the crossing is a straight line in, and the fall is
     // now where the journey ends rather than where it turns — so both halves
     // run on the ordinary idle drift.
-    const targetOrbitSpeed = (BASE_ORBIT_SPEED + extraSpeed) * orbitDirection;
+    //
+    // Damped away across the fall. At 0.05 rad/s the idle spin comes to about
+    // three degrees a second, which is nothing to look at while the journey is
+    // moving but carries the camera most of the way round in the time someone
+    // might leave the last frame sitting there — and the planet is a fixed point
+    // in the world now, so it would simply leave the shot. The fall ends still.
+    const orbitDamp = pastTunnel ? 1 - approachEase : 1;
+    const targetOrbitSpeed = (BASE_ORBIT_SPEED + extraSpeed) * orbitDirection * orbitDamp;
 
     // 3. Smoothly accelerate/decelerate towards target speed
     currentOrbitSpeed += (targetOrbitSpeed - currentOrbitSpeed) * 5 * delta;
@@ -682,6 +698,11 @@ import Lenis from 'lenis';
     // inside the black hole.
     if (pastTunnel) {
       updatePlanet(planetProgress, observer, window.innerWidth / window.innerHeight, time)
+    } else {
+      // Scrolled back off the fall. Drop the anchor so coming back down aims a
+      // fresh one — the camera's azimuth keeps drifting up in the tunnel, and a
+      // point fixed against where it used to be would be off the edge on return.
+      resetPlanetAnchor()
     }
 
     // update shader variables

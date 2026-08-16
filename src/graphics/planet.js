@@ -19,8 +19,8 @@ import * as THREE from 'three';
 
 const SEGMENTS = 64;
 
-// How far from the black hole the planet orbits. This has to stay comfortably
-// above the largest camera distance in the journey (45 at the arrival, see
+// How far from the black hole the planet sits. This has to stay comfortably
+// above the largest camera distance in the journey (42 at the arrival, see
 // arriveDist in src/main.js) — that is what guarantees the planet is always
 // further from the camera than the black hole is, and so that the black hole can
 // only ever be in front of it. Also outside the star shell, which reaches r = 42.
@@ -152,17 +152,18 @@ export function createPlanet(width, height) {
   const mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
 
+  // The planet's world position, fixed the first frame of the fall and not
+  // touched again until the fall is left. See update().
+  const anchor = new THREE.Vector3();
+  let anchored = false;
+
   /**
    * @param progress  0 as the fall toward the black hole begins, 1 at the end
    * @param observer  the camera being flown, for its position and orientation
    * @param aspect    viewport aspect ratio
-   * @param time      elapsed seconds, so the orbit keeps turning even while
-   *                  scroll is still — a body in orbit doesn't stop when the
-   *                  visitor's hand does
+   * @param time      elapsed seconds
    */
   function update(progress, observer, aspect, time) {
-    const eased = progress * progress * (3.0 - 2.0 * progress);
-
     // The camera rides with the observer and looks where it looks, so the planet
     // is lit and shaded consistently with the rest of the scene. It sees through a
     // much narrower lens, and that is deliberate: the raymarcher's frustum is
@@ -180,92 +181,77 @@ export function createPlanet(width, height) {
     }
     camera.updateMatrixWorld();
 
-    // sx and sy are screen coordinates in [-1, 1], and the target is sampled by
-    // screen position, so they land exactly. The black hole composes at sx = +0.5
-    // — see COMPOSE_SHIFT — and the planet sits above and left of it, moving
-    // *outward* from it across the fall.
+    // The planet is put somewhere once, on the first frame of the fall, and then
+    // left alone. Everything the visitor sees it do after that — drawing out from
+    // the black hole, growing, sliding as the camera's elevation drops — is the
+    // camera moving against a body that isn't.
     //
-    // Outward, because that is the direction the approach actually takes it. The
-    // planet holds a fixed distance from the black hole (ORBIT_RADIUS) while the
-    // camera closes from 42 units to around 5. Far out, the two distances are
-    // comparable and the planet appears close beside the black hole in the sky.
-    // Falling in, the black hole swells to fill the frame while the planet — no
-    // nearer than it was, and increasingly off to one side rather than ahead —
-    // opens up a wider and wider angle from it. It used to run the other way,
-    // starting at the edge and sliding inward, which is the parallax of a body
-    // being approached rather than one being passed.
+    // This is the whole point of the arrangement. Its screen position used to be
+    // authored as a curve in `progress`, which meant it had no parallax at all:
+    // drag the view, or let the idle spin drift, and the star field and the
+    // lensing moved while the planet sat exactly where it was. That one missing
+    // cue is what made it read as a decal composited over the scene rather than
+    // an object inside it, and no amount of tuning the curve fixes it, because
+    // the curve is the problem.
     //
-    // How far out it ends has to give way on a narrow viewport. The black hole is
-    // the same angular size either way, but portrait has far less width for it to
-    // be that size in, so by the last unit it owns most of the frame and the
-    // planet has to clear further to stay out from under it.
-    const narrow = Math.min(1, Math.max(0, (1.2 - aspect) / 0.8));
-    const sxStart = -0.22;
-    const sxEnd = -0.70 - 0.18 * narrow;
-    const sxHome = sxStart + (sxEnd - sxStart) * eased;
-    // Rises as it draws out, so the drift is radial from the black hole rather
-    // than a flat slide across the frame.
-    const syHome = 0.16 + 0.26 * eased;
+    // Two things had to give way for a fixed point to stay framed, both in
+    // main.js: the idle orbit now damps to nothing across the fall, and the
+    // camera's elevation swing was cut from 55 degrees to 9. A world-fixed body
+    // seen from a camera rotating 55 degrees swings further from the rotation
+    // than it ever does from the approach, and in the wrong direction.
+    if (!anchored) {
+      // Aimed rather than picked in world space, so the opening framing is exact
+      // regardless of where the idle spin left the camera's azimuth on the way
+      // through the tunnel. sx and sy are screen coordinates in [-1, 1] and the
+      // target is sampled by screen position, so they land where they say.
+      //
+      // Around 21 degrees off the view axis, which is chosen backwards from where
+      // it has to end up. By the last unit the black hole's shadow subtends some
+      // 27 degrees, so anything nearer the axis than about 30 finishes the fall
+      // behind it. Fixed at ORBIT_RADIUS, 21 degrees out at the start opens to
+      // just past 30 by the end — clear, but not by much more than it needs.
+      //
+      // Further out again on a narrow viewport, where the black hole owns much
+      // more of the frame for the same angular size.
+      const narrow = Math.min(1, Math.max(0, (1.2 - aspect) / 0.8));
+      const sx = -0.46 - 0.14 * narrow;
+      const sy = 0.20;
 
-    // Revolves around that home point rather than sitting still on it, so it
-    // reads as a body in orbit and not a cutout pasted beside the black hole. The
-    // orbit is on screen, not in world space: a true orbit at ORBIT_RADIUS (see
-    // below for why that distance is fixed) would sweep tens of degrees across
-    // the sky, carrying the planet on and off screen and out of scale with
-    // everything it needs to stay framed against. Faded in by `eased` so it does
-    // not wobble while still arcing in from the edge, and slow enough — one turn
-    // every 46 seconds — to look orbital rather than jittery.
-    const orbitAngle = time * ((2 * Math.PI) / 46);
-    const orbitAmountX = 0.06 * eased;
-    const orbitAmountY = orbitAmountX * 0.55; // foreshortened, as a tilted orbital plane would be
-    const sx = sxHome + orbitAmountX * Math.cos(orbitAngle);
-    const sy = syHome + orbitAmountY * Math.sin(orbitAngle);
+      // Pushed out along the aim until it is ORBIT_RADIUS from the black hole.
+      // That radius is what makes the occlusion right: the planet is composited
+      // in the background block, which rays terminating at the horizon never
+      // reach, so the black hole covers whatever is behind it and nothing else
+      // does. Holding it further from the black hole than the camera ever gets
+      // means it is always the further of the two, so "behind" is the only case
+      // that can arise and the free occlusion is always the correct one.
+      placement.set(sx, sy, 0.5).unproject(camera).sub(camera.position).normalize();
 
-    // Placed by unprojecting that screen position and pushing out along it until
-    // the planet is ORBIT_RADIUS from the black hole.
-    //
-    // Unprojecting, because a point picked in world space cannot be kept in frame:
-    // the orbit angle drifts with scroll momentum rather than scroll position, so
-    // earlier attempts at this put the planet behind the camera or off the edge
-    // depending on how the visitor had scrolled. Aimed, the framing is exact by
-    // construction and a pure function of progress.
-    //
-    // The radius, because it is what makes the occlusion right. The planet is
-    // composited in the background block, which rays terminating at the horizon
-    // never reach — so the black hole covers whatever is behind it, and nothing
-    // else does. Holding the planet further from the black hole than the camera
-    // ever gets means it is always the further of the two, so "behind" is the only
-    // case that can arise and the free occlusion is always the correct one.
-    placement.set(sx, sy, 0.5).unproject(camera).sub(camera.position).normalize();
+      // Distance along the aim that lands on the orbit: solve |C + t*d| = R. The
+      // camera is inside that sphere, which makes the discriminant larger than
+      // (C.d) squared, so the root is positive and the planet is never behind us.
+      const co = placement.dot(observer.position);
+      const range = -co + Math.sqrt(co * co - observer.position.lengthSq() + ORBIT_RADIUS * ORBIT_RADIUS);
+      anchor.copy(observer.position).addScaledVector(placement, range);
 
-    // Distance along the aim that lands on the orbit: solve |C + t*d| = R. The
-    // camera is always inside that sphere, which makes the discriminant larger
-    // than (C.d) squared, so the root is positive and the planet is never behind
-    // us however the orbit has drifted.
-    const co = placement.dot(observer.position);
-    const range = -co + Math.sqrt(co * co - observer.position.lengthSq() + ORBIT_RADIUS * ORBIT_RADIUS);
-    mesh.position.copy(observer.position).addScaledVector(placement, range);
+      // Set once, in world units, and never touched again — apparent size is now
+      // radius over distance and the distance is real, so the growth across the
+      // fall comes out of the geometry instead of being dialled in. It is a
+      // little over half again by the end, against the black hole's eight times.
+      // That ratio is the shot: everything grows, one thing grows much faster.
+      //
+      // The absolute size is set from the opening distance so it reads the same
+      // there as it did before, and held back on a narrow viewport, where the
+      // vertical field of view is most of the frame.
+      const framing = Math.min(1, 0.55 + 0.45 * aspect);
+      mesh.scale.setScalar(range * 0.016 * framing);
+      anchored = true;
+    }
 
-    // Apparent size is radius over distance, so scaling by the distance just
-    // solved for makes the angular size a straight function of progress rather
-    // than a side effect of the camera closing on the black hole.
-    //
-    // Held flat and edging down, for the same reason the drift runs outward: the
-    // camera closes on the black hole, not on the planet, and the planet's own
-    // distance barely moves across the whole fall. It should not appear to grow.
-    // The slight fall is the small real one — the approach ends up slightly
-    // further from a body off to the side than it started.
-    //
-    // It is set against the vertical field of view, which on a tall narrow screen
-    // is most of the frame, so it is held back a little as the viewport narrows.
-    //
-    // Small in absolute terms. Against a black hole that owns most of the frame by
-    // the last unit, this is scale reference — the thing that says how big the
-    // other thing is — and it stops doing that job the moment it is large enough
-    // to read as a subject of its own.
-    const framing = Math.min(1, 0.55 + 0.45 * aspect);
-    mesh.scale.setScalar(range * (0.016 - 0.003 * eased) * framing);
-    mesh.rotation.y = progress * 0.35 + orbitAngle * 0.2 + 0.6;
+    mesh.position.copy(anchor);
+    // Spins on its own axis. Slow, and the only motion left that isn't the
+    // camera's — a body this far out covers no meaningful arc of its orbit in the
+    // time anyone spends here, so anything faster reads as a turntable.
+    mesh.rotation.y = time * 0.012 + 0.6;
 
     // Lit by the accretion disk, which is the only light in this system and sits
     // at the origin the planet orbits. It used to be lit relative to the view,
@@ -277,6 +263,19 @@ export function createPlanet(width, height) {
     // followed the drifting orbit angle; pointing at the origin, the terminator
     // falls in the same place whatever the camera has done.
     uniforms.uLightDir.value.copy(mesh.position).negate().normalize();
+  }
+
+  // Called whenever the fall is left — scrolled back into the tunnel, where the
+  // planet is not drawn — so that coming back down re-frames it. The camera's
+  // azimuth drifts while the visitor is away and a point fixed against the old
+  // one would be off the edge on return.
+  //
+  // Deliberately not called on resize. The anchor holding through a resize is the
+  // honest behaviour for a body that is actually out there, and re-aiming on
+  // every resize event would make the planet jump around on mobile, where hiding
+  // and showing the address bar fires them continuously.
+  function resetAnchor() {
+    anchored = false;
   }
 
   function resize(nextWidth, nextHeight) {
@@ -294,6 +293,7 @@ export function createPlanet(width, height) {
     planetTarget: target,
     planetCamera: camera,
     updatePlanet: update,
+    resetPlanetAnchor: resetAnchor,
     resizePlanetTarget: resize,
     disposePlanet: dispose,
   };
