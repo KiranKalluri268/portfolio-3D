@@ -26,12 +26,41 @@ const SEGMENTS = 64;
 // only ever be in front of it. Also outside the star shell, which reaches r = 42.
 const ORBIT_RADIUS = 65.0;
 
-// Narrow enough that the planet stays round wherever it is placed. See the note
-// in update() — the raymarcher's own frustum is far too wide to draw a sphere
-// off-axis without flattening it.
-const PLANET_FOV = 45;
+// Must match COMPOSE_SHIFT in fragmentShader.glsl, which slides the projection
+// sideways so the black hole composes three quarters of the way across instead
+// of dead centre. The planet is sampled by screen position, so its camera has to
+// carry the same shift or the two disagree about where a direction lands.
+const COMPOSE_SHIFT = 0.5;
 
-const placement = new THREE.Vector3();
+// Where the planet is put, the first frame of the fall.
+//
+// Azimuth is relative to the camera's own, plus half a turn — so the planet sits
+// beyond the black hole rather than off to one side of it. That is what the
+// reference frame has, and it is also what makes the approach read: a body on
+// the far side is one the fall genuinely closes on, so it grows, just far more
+// slowly than the thing being fallen into. The small offset on top takes it off
+// the exact axis and puts it to one side.
+//
+// Elevation is absolute, measured from the disk plane, and it is the number that
+// does the most work in the final frame. The camera rides 14 to 5 degrees above
+// that plane, so anything much under about 15 degrees comes out level with the
+// disk or beneath it, which is where this used to sit. Well above it, the planet
+// clears the near-side arc and reads against empty sky.
+//
+// Both are picked backwards from where the planet has to end up. By the last
+// unit the black hole's shadow reaches about 0.51 of half the frame height, and
+// the planet finishes just outside its upper left corner — close enough to read
+// as being in its system, clear of the near-side arc. 32 and 24 degrees is what
+// lands there on a wide viewport and still leaves it comfortably on screen on a
+// phone, where the same world position throws far wider across a narrow frame.
+const ANCHOR_AZIMUTH_OFFSET = 32.0 * Math.PI / 180;
+const ANCHOR_ELEVATION = 24.0 * Math.PI / 180;
+
+// World radius. Apparent size is this over the real distance and nothing else,
+// so it is set once and the fall does the rest.
+const PLANET_RADIUS = 2.2;
+
+const DEG_TO_RAD = Math.PI / 180;
 
 const vertexShader = /* glsl */ `
   varying vec3 vObjectPos;
@@ -111,19 +140,21 @@ const fragmentShader = /* glsl */ `
     // A little wrap so the terminator is a band rather than a hard edge, and a
     // floor so the night side is dark without being a hole in the sky.
     //
-    // Kept far below full exposure. This body is tens of units out from the only
-    // source in the system and is seen against the disk's own glow, so a fully
-    // exposed globe reads as a foreground prop lit by something off-camera. What
-    // it should read as is a dark disc with a lit edge — scale reference, not a
-    // second subject.
-    float lighting = pow(lambert, 0.85) * 0.30 + 0.015;
+    // The reference frame has this as a near-black silhouette, and that is what
+    // it was for a while. It does not survive being shrunk: at a couple of
+    // percent of frame height a dark disc against dark sky is something you have
+    // to go looking for, and a thing nobody finds is not scale reference. Exposed
+    // enough to be picked out at a glance instead, which is the job it is here to
+    // do — still well under the disk, so it reads as lit by it rather than as its
+    // own source.
+    float lighting = pow(lambert, 0.85) * 0.85 + 0.06;
 
     vec3 viewDir = normalize(cameraPosition - vWorldPos);
     float fresnel = pow(1.0 - max(dot(n, viewDir), 0.0), 3.0);
-    // Atmosphere tracks the light, so the limb glows on the lit side only. It
-    // carries most of what is visible now that the surface is held down, which is
-    // the right split: the limb is what separates the silhouette from the sky.
-    vec3 atmosphere = uAtmosphere * fresnel * (0.06 + lambert * 0.55);
+    // Atmosphere tracks the light, so the limb glows on the lit side only. At
+    // this size the rim is a good part of the disc, and it is the blue that makes
+    // the planet findable against a field of white stars.
+    vec3 atmosphere = uAtmosphere * fresnel * (0.15 + lambert * 1.10);
 
     gl_FragColor = vec4(surface * lighting + atmosphere, 1.0);
   }
@@ -136,7 +167,49 @@ export function createPlanet(width, height) {
     magFilter: THREE.LinearFilter,
     format: THREE.RGBAFormat,
   });
-  const camera = new THREE.PerspectiveCamera(PLANET_FOV, width / height, 0.1, 100000);
+  const camera = new THREE.PerspectiveCamera(90, width / height, 0.1, 100000);
+  let projectionFov = -1;
+  let projectionAspect = -1;
+
+  // Reproduces the raymarcher's projection exactly, off-centre shift included.
+  //
+  // The two used to disagree: this camera ran a 45 degree lens against the
+  // shader's 90, so a direction landed at half the screen offset it should have,
+  // and the shift meant it landed on the wrong side of centre as well. That was
+  // survivable while the planet's screen position was authored outright — the
+  // numbers were tuned against what came out, not against what was correct — but
+  // it is the whole game once the planet is a fixed point in the world and the
+  // projection is what decides where it appears.
+  //
+  // Deriving the frustum: the shader builds its ray as forward + right*x*t +
+  // up*y*t, where t = tan(fov/2), y runs -1 to 1 up the screen, and x runs -1 to
+  // 1 across it, shifted by COMPOSE_SHIFT and then scaled by the aspect ratio.
+  // Its right vector is cross(forward, up), which in three.js view space — where
+  // forward is -Z and up is +Y — is +X. So the two agree on handedness, and the
+  // near plane bounds fall straight out of substituting x and y at the edges.
+  //
+  // The wide lens costs a little shape: a sphere this far off axis is stretched
+  // by 1/cos of the angle, around 12 percent out at 27 degrees. That is the
+  // correct projection of a sphere through a wide lens rather than an error, and
+  // at this size it is invisible. It was a real problem at the 65 degrees the
+  // planet used to sit at, which is what the narrow lens was there to dodge.
+  function applyProjection(fov, aspect) {
+    if (fov === projectionFov && aspect === projectionAspect) return;
+    projectionFov = fov;
+    projectionAspect = aspect;
+
+    const halfHeight = camera.near * Math.tan(fov / 2 * DEG_TO_RAD);
+    const halfWidth = halfHeight * aspect;
+    camera.projectionMatrix.makePerspective(
+      (-1 - COMPOSE_SHIFT) * halfWidth,
+      (1 - COMPOSE_SHIFT) * halfWidth,
+      halfHeight,
+      -halfHeight,
+      camera.near,
+      camera.far,
+    );
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+  }
 
   const geometry = new THREE.SphereGeometry(1, SEGMENTS, SEGMENTS / 2);
   const uniforms = {
@@ -164,21 +237,12 @@ export function createPlanet(width, height) {
    * @param time      elapsed seconds
    */
   function update(progress, observer, aspect, time) {
-    // The camera rides with the observer and looks where it looks, so the planet
-    // is lit and shaded consistently with the rest of the scene. It sees through a
-    // much narrower lens, and that is deliberate: the raymarcher's frustum is
-    // around 116 degrees across on a wide screen, and a sphere well off its axis
-    // is drawn stretched by 1/cos of that angle — the upper-left corner is some 65
-    // degrees out, which turned the planet into a flat ellipse. Its own lens keeps
-    // it round wherever it is put.
+    // The camera rides with the observer, looks where it looks, and now sees
+    // through the same lens — see applyProjection().
     camera.position.copy(observer.position);
     camera.up.copy(observer.up);
     camera.lookAt(0, 0, 0);
-    if (camera.aspect !== aspect) {
-      camera.aspect = aspect;
-      camera.updateProjectionMatrix();
-      camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
-    }
+    applyProjection(observer.fov, aspect);
     camera.updateMatrixWorld();
 
     // The planet is put somewhere once, on the first frame of the fall, and then
@@ -200,54 +264,33 @@ export function createPlanet(width, height) {
     // seen from a camera rotating 55 degrees swings further from the rotation
     // than it ever does from the approach, and in the wrong direction.
     if (!anchored) {
-      // Aimed rather than picked in world space, so the opening framing is exact
-      // regardless of where the idle spin left the camera's azimuth on the way
-      // through the tunnel. sx and sy are screen coordinates in [-1, 1] and the
-      // target is sampled by screen position, so they land where they say.
+      // Spherical coordinates about the black hole, in the observer's own
+      // convention — see applyOrbitPosition() in src/camera/Observer.js.
       //
-      // Around 21 degrees off the view axis, which is chosen backwards from where
-      // it has to end up. By the last unit the black hole's shadow subtends some
-      // 27 degrees, so anything nearer the axis than about 30 finishes the fall
-      // behind it. Fixed at ORBIT_RADIUS, 21 degrees out at the start opens to
-      // just past 30 by the end — clear, but not by much more than it needs.
+      // The azimuth is taken from the camera's rather than fixed in the world,
+      // because the idle spin leaves it somewhere arbitrary on the way through
+      // the tunnel and a world-fixed azimuth would put the planet anywhere at
+      // all. Everything that matters — the distance, the elevation above the
+      // disk, and so how the fall changes both — is absolute.
       //
-      // Further out again on a narrow viewport, where the black hole owns much
-      // more of the frame for the same angular size.
-      const narrow = Math.min(1, Math.max(0, (1.2 - aspect) / 0.8));
-      const sx = -0.46 - 0.14 * narrow;
-      const sy = 0.20;
-
-      // Pushed out along the aim until it is ORBIT_RADIUS from the black hole.
-      // That radius is what makes the occlusion right: the planet is composited
-      // in the background block, which rays terminating at the horizon never
-      // reach, so the black hole covers whatever is behind it and nothing else
-      // does. Holding it further from the black hole than the camera ever gets
-      // means it is always the further of the two, so "behind" is the only case
-      // that can arise and the free occlusion is always the correct one.
-      placement.set(sx, sy, 0.5).unproject(camera).sub(camera.position).normalize();
-
-      // Distance along the aim that lands on the orbit: solve |C + t*d| = R. The
-      // camera is inside that sphere, which makes the discriminant larger than
-      // (C.d) squared, so the root is positive and the planet is never behind us.
-      const co = placement.dot(observer.position);
-      const range = -co + Math.sqrt(co * co - observer.position.lengthSq() + ORBIT_RADIUS * ORBIT_RADIUS);
-      anchor.copy(observer.position).addScaledVector(placement, range);
-
-      // Set once, in world units, and never touched again — apparent size is now
-      // radius over distance and the distance is real, so the growth across the
-      // fall comes out of the geometry instead of being dialled in. It is a
-      // little over half again by the end, against the black hole's eight times.
-      // That ratio is the shot: everything grows, one thing grows much faster.
-      //
-      // The absolute size is set from the opening distance so it reads the same
-      // there as it did before, and held back on a narrow viewport, where the
-      // vertical field of view is most of the frame.
-      const framing = Math.min(1, 0.55 + 0.45 * aspect);
-      mesh.scale.setScalar(range * 0.016 * framing);
+      // ORBIT_RADIUS is also what makes the occlusion right. The planet is
+      // composited in the background block, which rays terminating at the horizon
+      // never reach, so the black hole covers whatever is behind it and nothing
+      // else does. Holding it further from the black hole than the camera ever
+      // gets means it is always the further of the two, so "behind" is the only
+      // case that can arise and the free occlusion is always the correct one.
+      const azimuth = observer.theta + Math.PI + ANCHOR_AZIMUTH_OFFSET;
+      const cosElevation = Math.cos(ANCHOR_ELEVATION);
+      anchor.set(
+        ORBIT_RADIUS * cosElevation * Math.sin(azimuth),
+        ORBIT_RADIUS * Math.sin(ANCHOR_ELEVATION),
+        ORBIT_RADIUS * cosElevation * Math.cos(azimuth),
+      );
       anchored = true;
     }
 
     mesh.position.copy(anchor);
+    mesh.scale.setScalar(PLANET_RADIUS);
     // Spins on its own axis. Slow, and the only motion left that isn't the
     // camera's — a body this far out covers no meaningful arc of its orbit in the
     // time anyone spends here, so anything faster reads as a turntable.
