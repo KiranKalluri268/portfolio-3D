@@ -586,6 +586,16 @@ import Lenis from 'lenis';
     // camera on the way in, little enough that the approach is what moves things.
     const startElev = 14.0 * Math.PI / 180;
     const endElev = 5.0 * Math.PI / 180;
+    // Roll. The reference frame is not shot level — the disk runs up to the right
+    // across the whole width, which is what stops it reading as a horizon line
+    // and starts it reading as a plane the camera happens to be near. Elevation
+    // cannot do this: at five degrees the disk is edge-on either way, it just
+    // sits flat. Only turning the camera about its own view axis tilts it.
+    //
+    // Rolled in across the fall rather than held from the start, so the horizon
+    // coming off level is part of the arrival rather than a frame someone lands
+    // in. Eighteen degrees is measured off the near-side arc in the reference.
+    const endRoll = 18.0 * Math.PI / 180;
 
     const crossingProgress = clamp01(scrollViewportUnits / JOURNEY.crossingEnd);
     const closeProgress = clamp01(
@@ -695,6 +705,15 @@ import Lenis from 'lenis';
     observer.distance = cameraConfig.distance
     observer.update(delta)
     cameraControl.update(delta)
+
+    // Roll is applied here, after everything that can move the camera, because it
+    // is defined about the view axis and that axis is only final once theta,
+    // elevation and any drag have settled for the frame. The shader takes cam_up
+    // as given and re-orthogonalises it against cam_dir, and the particle cameras
+    // copy it before their own lookAt, so tilting this one vector tilts the
+    // raymarched disk and the star field together.
+    const roll = pastTunnel ? endRoll * approachEase : 0;
+    observer.up.set(0, 1, 0).applyAxisAngle(observer.direction, roll);
 
     // slowly revolve particles around the BH when toggle is on
     if (cameraConfig.particleOrbit) {
