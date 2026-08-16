@@ -19,24 +19,36 @@ import * as THREE from 'three';
 
 const SEGMENTS = 64;
 
-// How far from the black hole the planet sits, and the main lever on how close
-// to it the planet looks. A tighter orbit is nearer in angle at every point of
-// the fall, which is the honest way to close that gap — the alternative is
-// dragging the planet across the sky faster than the approach warrants, which is
-// what it used to do.
+// How far from the black hole the planet sits. With the anchor angles below,
+// this is the whole lever on how close to the black hole the planet looks
+// through the first half of the fall, and it took two goes to see why.
 //
-// The floor on this is the occlusion. The planet is composited in the shader's
+// The separation the camera sees is atan(R sin f / (d + R cos f)), where R is
+// this radius, f is the total angular offset of the anchor, and d is the camera
+// distance. Two things fall out of it. Far out, d dominates the denominator, so
+// the separation is small and R scales it almost linearly — that is the half of
+// the fall this number controls. Close in, d drops away and the separation tends
+// to f whatever R is, so the last frame is governed by the anchor angles alone
+// and not by this at all.
+//
+// Which is why dropping 65 to 30 barely moved anything: it pulled the arrival in
+// a little but left the crowded final frame where it was, so the anchor angles
+// could not be opened up to compensate. Small radius with wide angles is the
+// combination that works — near the axis while the black hole is far, well clear
+// of it once the black hole fills the frame.
+//
+// The floor is the occlusion. The planet is composited in the shader's
 // background block, which rays terminating at the horizon never reach, so the
 // black hole covers whatever is behind it and nothing else does — free, and
 // correct only while the planet really is the further of the two. Anchored
-// beyond the black hole (see ANCHOR_AZIMUTH_OFFSET), the camera-to-planet
-// distance runs from about 70 down to 34 against a camera-to-black-hole distance
-// of 42 down to 5, so it holds the whole way with room to spare.
+// beyond the black hole, camera-to-planet runs about 51 down to 16 against a
+// camera-to-black-hole 42 down to 5. It holds, but the margin at the arrival is
+// only about 9 units, so this should not go much below 12.
 //
-// It used to be 65, which put it outside the star shell as well. At 30 it is
-// inside — which changes nothing, because the particle layers add over the
-// planet rather than depth-testing against it, and always did.
-const ORBIT_RADIUS = 30.0;
+// It used to be 65, outside the star shell. Inside it now, which changes
+// nothing: the particle layers add over the planet rather than depth-testing
+// against it, and always did.
+const ORBIT_RADIUS = 12.0;
 
 // Must match COMPOSE_SHIFT in fragmentShader.glsl, which slides the projection
 // sideways so the black hole composes three quarters of the way across instead
@@ -60,19 +72,23 @@ const COMPOSE_SHIFT = 0.5;
 // clears the near-side arc and reads against empty sky.
 //
 // Both are picked backwards from the last frame, which is where the margin is.
-// The shadow grows eightfold across the fall while the separation only grows by
-// about a third — the approach moves the camera far more than it moves the angle
-// — so the planet is at its most crowded right at the end, and these two angles
+// The shadow grows eightfold across the fall while the separation grows nothing
+// like as fast, so the planet is at its most crowded right at the end, and these
 // are near the floor of what clears it. Measured on a 1888 by 820 frame: the
 // shadow finishes at about 246 pixels of radius and the planet's near edge sits
-// some 50 outside it. Taking either angle down another four or five degrees puts
-// the planet behind the black hole for the last of the scroll.
-const ANCHOR_AZIMUTH_OFFSET = 30.0 * Math.PI / 180;
-const ANCHOR_ELEVATION = 26.0 * Math.PI / 180;
+// some 50 outside it. Four or five degrees off either and it finishes the scroll
+// behind the black hole.
+//
+// They are wide because ORBIT_RADIUS is small — see the note there. The two move
+// together: the radius sets how near the axis the planet is while the black hole
+// is still far away, the angles set where it ends up once the black hole fills
+// the frame, and only a small radius with wide angles gets both.
+const ANCHOR_AZIMUTH_OFFSET = 38.0 * Math.PI / 180;
+const ANCHOR_ELEVATION = 32.0 * Math.PI / 180;
 
 // World radius. Apparent size is this over the real distance and nothing else,
 // so it is set once and the fall does the rest.
-const PLANET_RADIUS = 0.7;
+const PLANET_RADIUS = 0.36;
 
 const DEG_TO_RAD = Math.PI / 180;
 
