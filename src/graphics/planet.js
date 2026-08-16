@@ -65,26 +65,33 @@ const COMPOSE_SHIFT = 0.5;
 // slowly than the thing being fallen into. The small offset on top takes it off
 // the exact axis and puts it to one side.
 //
-// Elevation is absolute, measured from the disk plane, and it is the number that
-// does the most work in the final frame. The camera rides 14 to 5 degrees above
-// that plane, so anything much under about 15 degrees comes out level with the
-// disk or beneath it, which is where this used to sit. Well above it, the planet
-// clears the near-side arc and reads against empty sky.
+// Elevation is absolute, measured from the disk plane, and it is what sets how
+// high the planet rides. The camera runs 14 to 5 degrees above that plane, so
+// much under about 15 degrees comes out level with the disk or beneath it. 24
+// keeps it clear of the near-side arc, reading against empty sky, without
+// sitting up near the top of the frame the way 32 did.
 //
 // Both are picked backwards from the last frame, which is where the margin is.
 // The shadow grows eightfold across the fall while the separation grows nothing
-// like as fast, so the planet is at its most crowded right at the end, and these
-// are near the floor of what clears it. Measured on a 1888 by 820 frame: the
-// shadow finishes at about 246 pixels of radius and the planet's near edge sits
-// some 50 outside it. Four or five degrees off either and it finishes the scroll
-// behind the black hole.
+// like as fast, so the planet is at its most crowded right at the end. Measured
+// on a 1888 by 820 frame: the shadow finishes at about 246 pixels of radius and
+// the planet's near edge sits some 50 outside it.
 //
-// They are wide because ORBIT_RADIUS is small — see the note there. The two move
-// together: the radius sets how near the axis the planet is while the black hole
-// is still far away, the angles set where it ends up once the black hole fills
-// the frame, and only a small radius with wide angles gets both.
-const ANCHOR_AZIMUTH_OFFSET = 38.0 * Math.PI / 180;
-const ANCHOR_ELEVATION = 32.0 * Math.PI / 180;
+// Which is why the two are traded against each other rather than set apart. The
+// pair carries a total angular offset, and only the total has to clear the
+// shadow — so elevation can come down if azimuth goes up, and the planet drops
+// in the frame without losing any of its margin. It is not an even trade: the
+// horizontal axis is compressed by the aspect ratio, so on a wide viewport a
+// degree spent sideways costs far less of the frame than a degree spent upward,
+// and buys the same separation. Dropping 32/38 to 24/44 lowers the planet by
+// about a fifth of the frame and leaves the clearance exactly where it was.
+//
+// They are wide in total because ORBIT_RADIUS is small — see the note there. The
+// two move together: the radius sets how near the axis the planet is while the
+// black hole is still far away, the angles set where it ends up once the black
+// hole fills the frame, and only a small radius with wide angles gets both.
+const ANCHOR_AZIMUTH_OFFSET = 44.0 * Math.PI / 180;
+const ANCHOR_ELEVATION = 24.0 * Math.PI / 180;
 
 // World radius. Apparent size is this over the real distance and nothing else,
 // so it is set once and the fall does the rest.
