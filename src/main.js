@@ -269,11 +269,22 @@ import Lenis from 'lenis';
 
   // Somewhere to arrive. Rendered to its own target and sampled by the shader —
   // see src/graphics/planet.js for why it does not share the particle ones.
-  const {
-    planetScene, planetTarget, planetCamera,
-    updatePlanet, resizePlanetTarget, disposePlanet
-  } = createPlanet(window.innerWidth, window.innerHeight);
-  uniforms.planet_texture.value = planetTarget.texture;
+  //
+  // Unmounted. The placement is settled and the lensed compositing works, but the
+  // last pass put the planet low enough to graze the accretion disk and near
+  // enough that the end of the fall is governed by the photon ring rather than by
+  // where the planet is anchored — neither of which has been looked at yet. See
+  // status.md for where it was left and what the open questions are.
+  //
+  // Nothing is deleted or unwired. This flag is the whole of it: false and the
+  // target is never created, never drawn, and planet_amount stays at 0 so the
+  // shader's planet block never runs. True puts it back exactly as it was.
+  const PLANET_ENABLED = false;
+
+  const planet = PLANET_ENABLED
+    ? createPlanet(window.innerWidth, window.innerHeight)
+    : null;
+  if (planet) uniforms.planet_texture.value = planet.planetTarget.texture;
   ready.then(() => {
     uniforms.bg_texture.value = textures.get('bg1')
     uniforms.star_texture.value = textures.get('star')
@@ -330,7 +341,7 @@ import Lenis from 'lenis';
     composer.setPixelRatio(pixelRatio)
     composer.setSize(window.innerWidth, window.innerHeight)
     resizeParticleTargets(renderWidth, renderHeight)
-    resizePlanetTarget(renderWidth, renderHeight)
+    planet?.resizePlanetTarget(renderWidth, renderHeight)
     resizeTunnel(window.innerWidth / window.innerHeight)
     uniforms.resolution.value.set(renderWidth, renderHeight)
   }
@@ -530,22 +541,28 @@ import Lenis from 'lenis';
     const crossingStartDist = 22.0;
     const crossingNearDist = 5.4;   // as close as we get before the dark
     const closeDist = 1.8;          // held through the passage
-    // How far out we come up on the far side. Two ceilings on this number, both
-    // found the hard way.
+    // How far out we come up on the far side.
     //
-    // It has to stay well under ORBIT_RADIUS in planet.js (65) — that margin is
-    // what guarantees the planet is always farther from the camera than the black
-    // hole, which is what the draw-order occlusion trick there depends on.
+    // 30 rather than the 42 it was, so the black hole is already something on the
+    // first frame past the passage instead of a bright speck — its shadow comes up
+    // at about 45 pixels of radius on a 1888 by 820 frame where it used to be 32.
+    // The fall gives up a third of its distance for that, 37 units down to 25,
+    // over the same 14 units of scroll.
     //
-    // It also can't outrun the raymarcher's own step budget. NSTEPS*STEP is a
-    // fixed ray-path length per quality tier — on 'low' that's 280*0.16 = 44.8 —
-    // and a ray that has to bend its way around the photon sphere needs
-    // meaningfully more path length than the straight-line camera distance. Above
-    // roughly 43-44 units on 'low', the most-bent rays run out of steps before
-    // they complete, and the ring comes up with a wedge missing rather than
-    // closed. Measured empirically across all three tiers, at both a phone and a
-    // desktop aspect: complete from 43 down, visibly bitten into by 44.
-    const arriveDist = 42.0;
+    // The ceiling on this is the raymarcher's step budget. NSTEPS*STEP is a fixed
+    // ray-path length per quality tier — on 'low' that's 280*0.16 = 44.8 — and a
+    // ray that has to bend its way around the photon sphere needs meaningfully
+    // more path length than the straight-line camera distance. Above roughly 43-44
+    // units on 'low', the most-bent rays run out of steps before they complete and
+    // the ring comes up with a wedge missing rather than closed. Measured across
+    // all three tiers at both a phone and a desktop aspect: complete from 43 down,
+    // visibly bitten into by 44. Coming down to 30 leaves that with room to spare.
+    //
+    // The floor is the planet. ORBIT_RADIUS in planet.js is 12, and the planet is
+    // anchored beyond the black hole, so camera-to-planet leads camera-to-black-
+    // hole by about 8 units here — that lead is what the draw-order occlusion
+    // trick depends on, and it narrows as this number climbs, not as it falls.
+    const arriveDist = 30.0;
     // Closest point of the fall, and the last frame of the journey. The black hole
     // subtends the same angle whatever the viewport, but portrait has far less
     // width for it to subtend that angle in — at the landscape distance it owns
@@ -553,13 +570,58 @@ import Lenis from 'lenis';
     // running off both edges. Backed off in proportion to how narrow it is.
     const viewportAspect = Math.max(window.innerWidth / window.innerHeight, 0.4);
     const narrowFraming = clamp01((1.2 - viewportAspect) / 0.8);
-    const blackHoleDist = 5.1 * (1.0 + 0.55 * narrowFraming);
+    // Closest approach, and what sets how big the black hole ends up in frame.
+    // Settled by rendering the last frame headlessly and laying it beside the
+    // reference scaled to the same height, rather than by measuring the
+    // reference on its own — see the note on COMPOSE_SHIFT in the shader for why
+    // that file does not survive being thresholded.
+    //
+    // The reference does not show a whole black hole — its shadow is about 0.97
+    // of the frame height across and centred high and right, so the top and the
+    // right of the circle are off frame and the disk covers most of the rest.
+    // Measured here, full diameter: 0.48 at 5.6, 0.71 at 4.2, 1.37 at 3.1. That
+    // is a steep curve, close to the inverse square of the distance, so small
+    // steps in here move the frame a long way. 3.6 lands on 0.97.
+    //
+    // Note this is inside the disk's outer edge (DISK_WIDTH puts that at r = 6),
+    // so the near side of the disk passes between the camera and the black hole
+    // and fills the bottom of the frame. The reference is shot from outside its
+    // disk, which is why its lower left recedes into dark where ours is a bright
+    // slab. Closing that is a disk-extent change, not a camera one.
+    const blackHoleDist = 3.6 * (1.0 + 0.55 * narrowFraming);
     // Nothing swings edge-on across the crossing, so the elevation only decides
     // how much of the star field sits above the horizon. Held flat: the whole
     // point of this half is that it is a straight line in.
     const crossingElev = 15.0 * Math.PI / 180;
+    // The fall opens 60 degrees above the disk plane and settles to 2.5, which is
+    // the whole cinematic move of this half: the disk arrives as a plate seen from
+    // above, opens out underneath the camera, and lays over edge-on as the black
+    // hole closes in. Without that sweep the approach is a straight dolly and the
+    // last frame is the only thing in it worth looking at.
+    //
+    // This was flattened to 14 degrees at one point because the planet, once it
+    // became a fixed body in the world rather than a scripted screen position,
+    // swung further from a turning camera than an approaching one ever moved it —
+    // the rotation ate the parallax. The planet is unmounted now (PLANET_ENABLED),
+    // so that constraint is gone and the sweep comes back.
+    //
+    // Elevation is the angle between the disk plane and the camera-to-black-hole
+    // line. Only the start moves here: the end is still 2.5, so every frame of the
+    // arrival is untouched. 2.5 is deliberately just above the 2 degree floor
+    // CameraDragControls clamps to, so the scripted fall does not finish somewhere
+    // drag cannot follow it back to.
     const startElev = 60.0 * Math.PI / 180;
-    const endElev = 5.0 * Math.PI / 180;
+    const endElev = 2.5 * Math.PI / 180;
+    // Roll. The reference frame is not shot level — the disk runs up to the right
+    // across the whole width, which is what stops it reading as a horizon line
+    // and starts it reading as a plane the camera happens to be near. Elevation
+    // cannot do this: at five degrees the disk is edge-on either way, it just
+    // sits flat. Only turning the camera about its own view axis tilts it.
+    //
+    // Rolled in across the fall rather than held from the start, so the horizon
+    // coming off level is part of the arrival rather than a frame someone lands
+    // in. Eighteen degrees is measured off the near-side arc in the reference.
+    const endRoll = 18.0 * Math.PI / 180;
 
     const crossingProgress = clamp01(scrollViewportUnits / JOURNEY.crossingEnd);
     const closeProgress = clamp01(
@@ -647,7 +709,14 @@ import Lenis from 'lenis';
     // That dive is gone — the crossing is a straight line in, and the fall is
     // now where the journey ends rather than where it turns — so both halves
     // run on the ordinary idle drift.
-    const targetOrbitSpeed = (BASE_ORBIT_SPEED + extraSpeed) * orbitDirection;
+    //
+    // Damped away across the fall. At 0.05 rad/s the idle spin comes to about
+    // three degrees a second, which is nothing to look at while the journey is
+    // moving but carries the camera most of the way round in the time someone
+    // might leave the last frame sitting there — and the planet is a fixed point
+    // in the world now, so it would simply leave the shot. The fall ends still.
+    const orbitDamp = pastTunnel ? 1 - approachEase : 1;
+    const targetOrbitSpeed = (BASE_ORBIT_SPEED + extraSpeed) * orbitDirection * orbitDamp;
 
     // 3. Smoothly accelerate/decelerate towards target speed
     currentOrbitSpeed += (targetOrbitSpeed - currentOrbitSpeed) * 5 * delta;
@@ -663,6 +732,15 @@ import Lenis from 'lenis';
     observer.update(delta)
     cameraControl.update(delta)
 
+    // Roll is applied here, after everything that can move the camera, because it
+    // is defined about the view axis and that axis is only final once theta,
+    // elevation and any drag have settled for the frame. The shader takes cam_up
+    // as given and re-orthogonalises it against cam_dir, and the particle cameras
+    // copy it before their own lookAt, so tilting this one vector tilts the
+    // raymarched disk and the star field together.
+    const roll = pastTunnel ? endRoll * approachEase : 0;
+    observer.up.set(0, 1, 0).applyAxisAngle(observer.direction, roll);
+
     // slowly revolve particles around the BH when toggle is on
     if (cameraConfig.particleOrbit) {
       particleSceneLensed.rotation.y += delta * 0.01  // ~1 full revolution per ~2.5 min
@@ -674,14 +752,21 @@ import Lenis from 'lenis';
     // advanced, because it is positioned from the camera's own basis and would
     // otherwise sit a frame behind the camera it is framed against.
     const planetProgress = approachProgress
-    uniforms.planet_amount.value = pastTunnel ? smoothstep(clamp01(planetProgress / 0.22)) : 0
+    uniforms.planet_amount.value = planet && pastTunnel
+      ? smoothstep(clamp01(planetProgress / 0.22))
+      : 0
     // Placed on every frame past the tunnel, not only on the ones it is visible
     // for. Gating the placement on the same flag as the draw left the mesh
     // wherever it was last put — including its initial position at the origin —
     // so the first frame after it faded up could sample a planet still sitting
     // inside the black hole.
-    if (pastTunnel) {
-      updatePlanet(planetProgress, observer, window.innerWidth / window.innerHeight, time)
+    if (planet && pastTunnel) {
+      planet.updatePlanet(planetProgress, observer, window.innerWidth / window.innerHeight, time)
+    } else if (planet) {
+      // Scrolled back off the fall. Drop the anchor so coming back down aims a
+      // fresh one — the camera's azimuth keeps drifting up in the tunnel, and a
+      // point fixed against where it used to be would be off the edge on return.
+      planet.resetPlanetAnchor()
     }
 
     // update shader variables
@@ -723,15 +808,15 @@ import Lenis from 'lenis';
 
     // Only drawn once there is something to draw, so the approach and the
     // passage pay nothing for it.
-    if (uniforms.planet_amount.value > 0) {
+    if (planet && uniforms.planet_amount.value > 0) {
       // The renderer's clear alpha is 1, which is right for the particle targets
       // because they composite additively and their alpha is never read. This one
       // is composited alpha-over, so clearing it opaque would paint a black frame
       // across the whole sky. Cleared transparent, and put back afterwards.
       renderer.setClearAlpha(0)
-      renderer.setRenderTarget(planetTarget)
+      renderer.setRenderTarget(planet.planetTarget)
       renderer.clear()
-      renderer.render(planetScene, planetCamera)
+      renderer.render(planet.planetScene, planet.planetCamera)
       renderer.setClearAlpha(1)
     }
 
@@ -860,7 +945,7 @@ import Lenis from 'lenis';
     storyOverlay.dispose();
     disposeParticleSystem();
     disposeTunnel();
-    disposePlanet();
+    planet?.disposePlanet();
     disposeShaderPlane();
     disposeScene();
     disposeTextures();
