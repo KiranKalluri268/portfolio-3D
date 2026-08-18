@@ -593,23 +593,24 @@ import Lenis from 'lenis';
     // how much of the star field sits above the horizon. Held flat: the whole
     // point of this half is that it is a straight line in.
     const crossingElev = 15.0 * Math.PI / 180;
-    // The fall used to open 60 degrees above the disk plane and settle to 5, a
-    // 55 degree rotation across the shot. That had to come down once the planet
-    // became a fixed point in the world rather than a scripted screen position:
-    // a body out at ORBIT_RADIUS swings further from the camera turning than it
-    // ever does from the camera approaching, and inward, which is backwards —
-    // the rotation buried the parallax the approach was supposed to produce.
+    // The fall opens 60 degrees above the disk plane and settles to 2.5, which is
+    // the whole cinematic move of this half: the disk arrives as a plate seen from
+    // above, opens out underneath the camera, and lays over edge-on as the black
+    // hole closes in. Without that sweep the approach is a straight dolly and the
+    // last frame is the only thing in it worth looking at.
     //
-    // Six and a half degrees is what is left. Enough that the disk still opens up
-    // under the camera on the way in, little enough that the approach is what
-    // moves things.
+    // This was flattened to 14 degrees at one point because the planet, once it
+    // became a fixed body in the world rather than a scripted screen position,
+    // swung further from a turning camera than an approaching one ever moved it —
+    // the rotation ate the parallax. The planet is unmounted now (PLANET_ENABLED),
+    // so that constraint is gone and the sweep comes back.
     //
-    // Lowered from 14/5. This is the angle between the disk plane and the line
-    // from the camera to the black hole, so dropping it lays the disk more
-    // edge-on and puts the camera nearer its plane. 2.5 at the end is deliberately
-    // just above the 2 degree floor CameraDragControls clamps to, so the scripted
-    // fall does not finish somewhere drag cannot follow it back to.
-    const startElev = 9.0 * Math.PI / 180;
+    // Elevation is the angle between the disk plane and the camera-to-black-hole
+    // line. Only the start moves here: the end is still 2.5, so every frame of the
+    // arrival is untouched. 2.5 is deliberately just above the 2 degree floor
+    // CameraDragControls clamps to, so the scripted fall does not finish somewhere
+    // drag cannot follow it back to.
+    const startElev = 60.0 * Math.PI / 180;
     const endElev = 2.5 * Math.PI / 180;
     // Roll. The reference frame is not shot level — the disk runs up to the right
     // across the whole width, which is what stops it reading as a horizon line
