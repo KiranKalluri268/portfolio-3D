@@ -276,7 +276,7 @@ import Lenis from 'lenis';
 
   // The passage between the two worlds. Rendered through the same composer, so
   // it inherits bloom without a second post-processing chain.
-  const { tunnelScene, tunnelCamera, updateTunnel, resizeTunnel, disposeTunnel } =
+  const { tunnelScene, tunnelCamera, updateTunnel, resizeTunnel, disposeTunnel, setTunnelTextures } =
     createTunnel(window.innerWidth / window.innerHeight);
   let tunnelActive = false;
 
@@ -302,6 +302,8 @@ import Lenis from 'lenis';
     uniforms.bg_texture.value = textures.get('bg1')
     uniforms.star_texture.value = textures.get('star')
     uniforms.disk_texture.value = textures.get('disk')
+    // The passage borrows the world's sky plates for its walls.
+    setTunnelTextures(textures.get('star'), textures.get('bg1'))
   });
 
   // GUI
