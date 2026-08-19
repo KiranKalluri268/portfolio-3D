@@ -187,6 +187,8 @@ import Lenis from 'lenis';
     throat_color_plane: { type: "v3", value: new THREE.Vector3(0.020, 0.009, 0.007) },
     throat_color_pole: { type: "v3", value: new THREE.Vector3(0.006, 0.002, 0.002) },
     throat_bend_clamp: { type: "f", value: 0.5 },
+    throat_twist: { type: "f", value: 1.6 },
+    throat_star_blur: { type: "f", value: 1.0 },
     throat_tint: { type: "v3", value: new THREE.Vector3(1.0, 0.66, 0.44) },
     throat_star_gain: { type: "f", value: 0.35 },
     throat_nebula_gain: { type: "f", value: 1.6 },

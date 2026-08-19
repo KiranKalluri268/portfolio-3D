@@ -91,6 +91,8 @@ uniform float throat_sky_rotation;
 uniform vec3 throat_color_plane;
 uniform vec3 throat_color_pole;
 uniform float throat_bend_clamp; // radians of winding the far side is allowed to show
+uniform float throat_twist;      // azimuthal drag, radians of spin per radian of bend
+uniform float throat_star_blur;  // widens the far side's stars so they stop aliasing into rings
 uniform vec3 throat_tint;       // multiplies the far side's stars and nebula
 uniform float throat_star_gain;
 uniform float throat_nebula_gain;
@@ -172,19 +174,42 @@ vec3 temp_to_color(float temp_kelvin){
 // what stops the two skies drifting apart as either is tuned.
 //   rotation      degrees about Z, so the far side is a different patch of sky
 //   doppler_factor pass 1.0 to leave the star temperatures alone
+// One star, decoded. Pulled out of sample_sky so the throat can average several
+// taps of it without duplicating the temperature decode.
+vec3 star_at(vec2 tex_coord, vec3 tint, float star_gain, float doppler_factor){
+  vec4 star_color = texture2D(star_texture, tex_coord);
+  if (star_color.g <= 0.0) return vec3(0.0);
+  float star_temperature = (MIN_TEMPERATURE + TEMPERATURE_RANGE*star_color.r);
+  float star_velocity = star_color.b - 0.5;
+  float star_doppler_factor = sqrt((1.0+star_velocity)/(1.0-star_velocity));
+  if (doppler_shift)
+    star_temperature /= doppler_factor*star_doppler_factor;
+  return temp_to_color(star_temperature) * tint * star_color.g * star_gain;
+}
+
 vec3 sample_sky(vec3 dir, float rotation, vec3 tint, vec3 plane_color, vec3 pole_color,
-                float star_gain, float nebula_gain, float doppler_factor){
+                float star_gain, float nebula_gain, float doppler_factor, float star_blur){
   vec2 tex_coord = to_spherical(dir * ROT_Z(rotation * DEG_TO_RAD));
   vec3 sky = vec3(0.0);
 
-  vec4 star_color = texture2D(star_texture, tex_coord);
-  if (star_color.g > 0.0){
-    float star_temperature = (MIN_TEMPERATURE + TEMPERATURE_RANGE*star_color.r);
-    float star_velocity = star_color.b - 0.5;
-    float star_doppler_factor = sqrt((1.0+star_velocity)/(1.0-star_velocity));
-    if (doppler_shift)
-      star_temperature /= doppler_factor*star_doppler_factor;
-    sky += temp_to_color(star_temperature) * tint * star_color.g * star_gain;
+  // A star is one texel. Where the mapping from screen to sky is steep — which
+  // is the whole interior of the throat — that one texel gets replicated across
+  // a long arc, and a field of points becomes a field of rings. Averaging a few
+  // taps turns each point back into a small disc, which smears along the arc
+  // instead of stamping a hard line down it.
+  //
+  // The background passes 0 and keeps its single tap: it is sampled along the
+  // unbent ray, where the mapping is near enough uniform that there is nothing
+  // to alias, and the stars there are meant to be points.
+  if (star_blur > 0.0) {
+    float r = star_blur * 0.004;
+    sky += star_at(tex_coord, tint, star_gain, doppler_factor) * 0.36;
+    sky += star_at(tex_coord + vec2( r, 0.0), tint, star_gain, doppler_factor) * 0.16;
+    sky += star_at(tex_coord + vec2(-r, 0.0), tint, star_gain, doppler_factor) * 0.16;
+    sky += star_at(tex_coord + vec2(0.0,  r), tint, star_gain, doppler_factor) * 0.16;
+    sky += star_at(tex_coord + vec2(0.0, -r), tint, star_gain, doppler_factor) * 0.16;
+  } else {
+    sky += star_at(tex_coord, tint, star_gain, doppler_factor);
   }
 
   sky += mix(plane_color, pole_color, smoothstep(0.0, 0.55, abs(dir.y)));
@@ -292,11 +317,44 @@ void main()	{
       // far side is not moving with respect to anything here.
       vec3 vdir = normalize(velocity);
       float bend = acos(clamp(dot(orig_ray_dir, vdir), -1.0, 1.0));
+
+      // Compressed with tanh rather than clipped with min(). Both cap the bend
+      // at throat_bend_clamp, but min() has a kink where it engages and that
+      // kink is a circle on screen — a faint hard edge partway out from the
+      // centre. tanh flattens into the same cap with a continuous derivative,
+      // so there is no radius at which the image changes character.
+      float bend_eff = bend > 0.0001
+        ? throat_bend_clamp * tanh(bend / throat_bend_clamp)
+        : bend;
       vec3 through = normalize(mix(orig_ray_dir, vdir,
-                                   bend > 0.0001 ? min(1.0, throat_bend_clamp / bend) : 1.0));
+                                   bend > 0.0001 ? bend_eff / bend : 1.0));
+
+      // ── Why this is here ──
+      // The acceleration above is central, so a ray never leaves the plane
+      // containing itself and the origin: every ray bends straight toward or
+      // away from the throat's centre on screen. The direction we end up
+      // sampling is therefore a function of one number — how far the ray passed
+      // from the centre — and two pixels at the same screen radius read the same
+      // latitude of the far sky. Concentric rings were not an artifact sitting
+      // on the image, they were what the mapping can produce.
+      //
+      // Twisting about the axis to the centre by an angle that grows with the
+      // bend is what breaks that. Rings become spirals, and neighbouring radii
+      // stop landing on the same patch of sky. A rotating throat drags light
+      // this way for real, so it is not a cheat so much as the symmetry the
+      // static solution happens not to have.
+      vec3 axis = normalize(-cam_pos);
+      float twist = throat_twist * bend_eff;
+      float ct = cos(twist);
+      float st = sin(twist);
+      through = normalize(through * ct
+                          + cross(axis, through) * st
+                          + axis * dot(axis, through) * (1.0 - ct));
+
       vec3 far_side = sample_sky(through, throat_sky_rotation, throat_tint,
                                  throat_color_plane, throat_color_pole,
-                                 throat_star_gain, throat_nebula_gain, 1.0);
+                                 throat_star_gain, throat_nebula_gain, 1.0,
+                                 throat_star_blur);
 
       // There used to be a grazing-angle rim term here to give the throat an
       // edge. It did, but pow(rim, 3.0) is a function of the crossing angle
@@ -376,7 +434,7 @@ void main()	{
     vec3 bg_dir = normalize(mix(orig_ray_dir, normalize(velocity), bg_lensing));
     color += vec4(sample_sky(bg_dir, 45.0, bg_tint,
                              space_color_plane, space_color_pole,
-                             1.0, 0.2, ray_doppler_factor), 1.0);
+                             1.0, 0.2, ray_doppler_factor, 0.0), 1.0);
 
     // ── The planet ────────────────────────────────────────────────────────
     // Composited alpha-over, and before the star field and the disk, because it
