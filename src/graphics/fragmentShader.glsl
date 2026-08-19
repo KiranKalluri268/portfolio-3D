@@ -78,6 +78,7 @@ uniform bool show_lensing;
 uniform float throat_throughput; // 0.0 = black hole absorbs, 1.0 = wormhole transmits
 uniform vec3 disk_tint;
 uniform vec3 bg_tint;            // multiplies stars and the nebula plate
+uniform float bg_lensing;        // 0 = background sampled straight, 1 = bent with the ray
 uniform vec3 space_color_plane;  // deep space toward the galactic plane
 uniform vec3 space_color_pole;   // deep space away from it
 
@@ -89,10 +90,10 @@ uniform vec3 space_color_pole;   // deep space away from it
 uniform float throat_sky_rotation;
 uniform vec3 throat_color_plane;
 uniform vec3 throat_color_pole;
+uniform float throat_bend_clamp; // radians of winding the far side is allowed to show
+uniform vec3 throat_tint;       // multiplies the far side's stars and nebula
 uniform float throat_star_gain;
 uniform float throat_nebula_gain;
-uniform vec3 throat_rim_color;
-uniform float throat_rim_gain;
 
 
 
@@ -289,16 +290,19 @@ void main()	{
       // arrives already swirled toward the rim: the crystal-ball distortion is
       // the integrator's doing, not an effect layered on top. No doppler — the
       // far side is not moving with respect to anything here.
-      vec3 through = normalize(velocity);
-      vec3 far_side = sample_sky(through, throat_sky_rotation, vec3(1.0),
+      vec3 vdir = normalize(velocity);
+      float bend = acos(clamp(dot(orig_ray_dir, vdir), -1.0, 1.0));
+      vec3 through = normalize(mix(orig_ray_dir, vdir,
+                                   bend > 0.0001 ? min(1.0, throat_bend_clamp / bend) : 1.0));
+      vec3 far_side = sample_sky(through, throat_sky_rotation, throat_tint,
                                  throat_color_plane, throat_color_pole,
                                  throat_star_gain, throat_nebula_gain, 1.0);
 
-      // Rays crossing tangentially graze the throat and light its edge; rays
-      // crossing head-on do not. That is what gives it a boundary instead of
-      // letting it read as a patch of brighter sky.
-      float rim = 1.0 - abs(dot(through, normalize(point)));
-      far_side += throat_rim_color * pow(rim, 3.0) * throat_rim_gain;
+      // There used to be a grazing-angle rim term here to give the throat an
+      // edge. It did, but pow(rim, 3.0) is a function of the crossing angle
+      // alone, so it painted the same value all the way around every ray shell
+      // and stacked up as hard concentric rings inside the sphere. The swirled
+      // sky already reads as a boundary on its own, so the term is gone.
 
       color += vec4(far_side * throat_throughput, 1.0);
       break;
@@ -360,8 +364,17 @@ void main()	{
   
   if (distance > 1.0){
 
-    // ── Background: ALWAYS straight ray, never affected by lensing toggle ──
-    color += vec4(sample_sky(orig_ray_dir, 45.0, bg_tint,
+    // ── Background ──
+    // The black hole samples this straight down the unbent ray, which is a
+    // deliberate call: its own arcs read better against a still field.
+    //
+    // The wormhole does not get that. It is a hole you look through, and the
+    // whole point of the arc around it is that the sky behind is being dragged
+    // around the rim — a straight background leaves the arc sitting on top of a
+    // field that never moved, and the mouth stops reading as a lens. So the
+    // direction bends with the ray here, and bg_lensing carries the world.
+    vec3 bg_dir = normalize(mix(orig_ray_dir, normalize(velocity), bg_lensing));
+    color += vec4(sample_sky(bg_dir, 45.0, bg_tint,
                              space_color_plane, space_color_pole,
                              1.0, 0.2, ray_doppler_factor), 1.0);
 
