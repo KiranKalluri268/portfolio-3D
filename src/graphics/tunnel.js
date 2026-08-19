@@ -29,6 +29,9 @@ const fragmentShader = /* glsl */ `
   varying vec2 vUv;
   varying vec3 vWorldPos;
 
+  uniform sampler2D uStarTex;
+  uniform sampler2D uBgTex;
+  uniform float uSkyAmount;
   uniform float uFlow;
   uniform float uExitGlow;
   uniform float uReveal;
@@ -63,6 +66,30 @@ const fragmentShader = /* glsl */ `
     return total;
   }
 
+  // Lifted from the raymarcher, because these are meant to be recognisably the
+  // same stars: the star plate packs temperature in red and brightness in green
+  // rather than storing colour, so sampling it raw gives a red-green field that
+  // looks nothing like the sky outside.
+  vec3 temp_to_color(float temp_kelvin){
+    vec3 color;
+    temp_kelvin = clamp(temp_kelvin, 1000.0, 40000.0) / 100.0;
+    if (temp_kelvin <= 66.0){
+      color.r = 255.0;
+      color.g = clamp(99.4708025861 * log(temp_kelvin) - 161.1195681661, 0.0, 255.0);
+    } else {
+      color.r = clamp(329.698727446 * pow(max(temp_kelvin - 60.0, 0.0), -0.1332047592), 0.0, 255.0);
+      color.g = clamp(288.1221695283 * pow(max(temp_kelvin - 60.0, 0.0), -0.0755148492), 0.0, 255.0);
+    }
+    if (temp_kelvin >= 66.0) {
+      color.b = 255.0;
+    } else if (temp_kelvin <= 19.0) {
+      color.b = 0.0;
+    } else {
+      color.b = clamp(138.5177312231 * log(temp_kelvin - 10.0) - 305.0447927307, 0.0, 255.0);
+    }
+    return color / 255.0;
+  }
+
   void main() {
     // vUv.y is 0 at the far mouth and 1 behind the camera, so "toExit" grows
     // toward the light we are heading for.
@@ -81,6 +108,37 @@ const fragmentShader = /* glsl */ `
 
     vec3 color = mix(uColorNear, uColorFar, smoothstep(0.1, 1.0, toExit));
     color *= wall * headlight;
+
+    // ── The sky, wrapped onto the wall ──
+    // The same two plates the world outside uses, read with the tube's own UVs:
+    // x wraps around the wall, y runs along it. An equirectangular sky forced
+    // onto a cylinder is the distortion — it arrives stretched down the tube and
+    // wound around it, which is the point. The y scale is what sets how hard it
+    // is drawn out; at 3 the field is stretched enough to read as motion rather
+    // than as a photograph of the sky pasted inside a pipe.
+    //
+    // Scrolled by uFlow so it streams past with the walls instead of sitting
+    // still while the noise underneath it moves — the two coming apart is
+    // immediately obvious and reads as a texture sliding over a surface.
+    vec2 skyUv = vec2(vUv.x, fract(vUv.y * 3.0 - uFlow * 0.02));
+
+    vec4 star = texture2D(uStarTex, skyUv);
+    vec3 sky = vec3(0.0);
+    if (star.g > 0.0) {
+      sky += temp_to_color(1000.0 + 39000.0 * star.r) * star.g * 0.6;
+    }
+    sky += texture2D(uBgTex, skyUv).rgb * 0.22;
+
+    // Faded out toward the far end. The exit glow and the bloom threshold are
+    // both already climbing there, and a broadband star field added on top of
+    // them takes the last third of the passage to a flat white screen — the
+    // walls, the mouth and the light all bleach into one thing.
+    sky *= 1.0 - pow(toExit, 2.5);
+
+    // Tinted toward the far end's warmth and lit by the same headlight, so the
+    // stars belong to the tunnel's depth cue rather than floating on top of it
+    // at full brightness all the way down the tube.
+    color += sky * uColorFar * headlight * uSkyAmount;
 
     // Softens the rim so the tunnel opens into the light rather than stopping at
     // a disc. Confined to the far end — spread any wider and it floods the whole
@@ -102,6 +160,9 @@ export function createTunnel(aspect = 1) {
   geometry.rotateX(Math.PI / 2);
 
   const uniforms = {
+    uStarTex: { value: null },
+    uBgTex: { value: null },
+    uSkyAmount: { value: 1.0 },
     uFlow: { value: 0 },
     uExitGlow: { value: 0 },
     uReveal: { value: 0 },
@@ -157,6 +218,27 @@ export function createTunnel(aspect = 1) {
     mouthMaterial.opacity = Math.max(0, (progress - 0.45) / 0.55) * 0.4 * reveal;
   }
 
+  // The plates arrive with the rest of the loader, after the tunnel is built.
+  //
+  // Cloned rather than used directly. The wall wraps the sky all the way around
+  // the tube, so it needs RepeatWrapping to close without a seam — and the
+  // originals are ClampToEdge because that is what the raymarcher wants. A clone
+  // shares the uploaded image but carries its own sampler state, so the tunnel
+  // gets its wrap without reaching into the world's copy.
+  let ownedTextures = [];
+  function setTextures(starTexture, bgTexture) {
+    ownedTextures.forEach((t) => t.dispose());
+    ownedTextures = [starTexture, bgTexture].filter(Boolean).map((source) => {
+      const copy = source.clone();
+      copy.wrapS = THREE.RepeatWrapping;
+      copy.wrapT = THREE.RepeatWrapping;
+      copy.needsUpdate = true;
+      return copy;
+    });
+    uniforms.uStarTex.value = ownedTextures[0] ?? null;
+    uniforms.uBgTex.value = ownedTextures[1] ?? null;
+  }
+
   function resize(nextAspect) {
     if (camera.aspect === nextAspect) return;
     camera.aspect = nextAspect;
@@ -168,7 +250,9 @@ export function createTunnel(aspect = 1) {
     material.dispose();
     mouthGeometry.dispose();
     mouthMaterial.dispose();
+    ownedTextures.forEach((t) => t.dispose());
+    ownedTextures = [];
   }
 
-  return { tunnelScene: scene, tunnelCamera: camera, updateTunnel: update, resizeTunnel: resize, disposeTunnel: dispose };
+  return { tunnelScene: scene, tunnelCamera: camera, updateTunnel: update, resizeTunnel: resize, disposeTunnel: dispose, setTunnelTextures: setTextures };
 }
