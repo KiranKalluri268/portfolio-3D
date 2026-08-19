@@ -89,10 +89,9 @@ uniform vec3 space_color_pole;   // deep space away from it
 uniform float throat_sky_rotation;
 uniform vec3 throat_color_plane;
 uniform vec3 throat_color_pole;
+uniform vec3 throat_tint;       // multiplies the far side's stars and nebula
 uniform float throat_star_gain;
 uniform float throat_nebula_gain;
-uniform vec3 throat_rim_color;
-uniform float throat_rim_gain;
 
 
 
@@ -290,15 +289,15 @@ void main()	{
       // the integrator's doing, not an effect layered on top. No doppler — the
       // far side is not moving with respect to anything here.
       vec3 through = normalize(velocity);
-      vec3 far_side = sample_sky(through, throat_sky_rotation, vec3(1.0),
+      vec3 far_side = sample_sky(through, throat_sky_rotation, throat_tint,
                                  throat_color_plane, throat_color_pole,
                                  throat_star_gain, throat_nebula_gain, 1.0);
 
-      // Rays crossing tangentially graze the throat and light its edge; rays
-      // crossing head-on do not. That is what gives it a boundary instead of
-      // letting it read as a patch of brighter sky.
-      float rim = 1.0 - abs(dot(through, normalize(point)));
-      far_side += throat_rim_color * pow(rim, 3.0) * throat_rim_gain;
+      // There used to be a grazing-angle rim term here to give the throat an
+      // edge. It did, but pow(rim, 3.0) is a function of the crossing angle
+      // alone, so it painted the same value all the way around every ray shell
+      // and stacked up as hard concentric rings inside the sphere. The swirled
+      // sky already reads as a boundary on its own, so the term is gone.
 
       color += vec4(far_side * throat_throughput, 1.0);
       break;
