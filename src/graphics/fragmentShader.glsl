@@ -92,6 +92,7 @@ uniform vec3 throat_color_plane;
 uniform vec3 throat_color_pole;
 uniform float throat_bend_clamp; // radians of winding the far side is allowed to show
 uniform float throat_twist;      // azimuthal drag, radians of spin per radian of bend
+uniform vec3 throat_spin_axis;   // the throat's own axis, NOT the line of sight
 uniform float throat_star_blur;  // widens the far side's stars so they stop aliasing into rings
 uniform vec3 throat_tint;       // multiplies the far side's stars and nebula
 uniform float throat_star_gain;
@@ -338,12 +339,20 @@ void main()	{
       // latitude of the far sky. Concentric rings were not an artifact sitting
       // on the image, they were what the mapping can produce.
       //
-      // Twisting about the axis to the centre by an angle that grows with the
-      // bend is what breaks that. Rings become spirals, and neighbouring radii
-      // stop landing on the same patch of sky. A rotating throat drags light
-      // this way for real, so it is not a cheat so much as the symmetry the
-      // static solution happens not to have.
-      vec3 axis = normalize(-cam_pos);
+      // The drag below is what breaks that, but only because it turns about a
+      // fixed axis of the throat's own. Turning about the axis to the camera —
+      // which is what this did first — is useless for the purpose: that axis IS
+      // the symmetry axis of the screen image, so rotating about it slides
+      // points along the very circles the problem is made of. Latitude stays
+      // constant around each one and the rings survive as spirals.
+      //
+      // About a fixed axis, how far a ray is dragged depends on where it passed
+      // relative to that axis and not just on how close it came, so latitude
+      // varies with azimuth and screen-radius circles stop mapping to sky
+      // latitude circles. That is also the more honest version: a rotating
+      // throat has a spin axis of its own, and light's inclination to it is
+      // exactly what decides the drag.
+      vec3 axis = normalize(throat_spin_axis);
       float twist = throat_twist * bend_eff;
       float ct = cos(twist);
       float st = sin(twist);
