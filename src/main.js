@@ -161,6 +161,7 @@ import Lenis from 'lenis';
     planet_texture: { type: "t", value: null },
     planet_amount: { type: "f", value: 0.0 },
     show_lensing: { type: "b", value: true },
+    bg_lensing: { type: "f", value: 0.0 },
     // Defaults reproduce the black hole exactly — the values below are the
     // constants they replaced in the shader. The journey drives them.
     // throat_throughput at 0 collapses the horizon branch back to black, so the
@@ -185,6 +186,7 @@ import Lenis from 'lenis';
     throat_sky_rotation: { type: "f", value: 40.0 },
     throat_color_plane: { type: "v3", value: new THREE.Vector3(0.020, 0.009, 0.007) },
     throat_color_pole: { type: "v3", value: new THREE.Vector3(0.006, 0.002, 0.002) },
+    throat_bend_clamp: { type: "f", value: 0.5 },
     throat_tint: { type: "v3", value: new THREE.Vector3(1.0, 0.66, 0.44) },
     throat_star_gain: { type: "f", value: 0.35 },
     throat_nebula_gain: { type: "f", value: 1.6 },
@@ -199,6 +201,7 @@ import Lenis from 'lenis';
     bgTint: new THREE.Vector3(1.0, 0.82, 0.72),
     spaceColorPlane: new THREE.Vector3(0.045, 0.022, 0.028),
     spaceColorPole: new THREE.Vector3(0.012, 0.004, 0.008),
+    bgLensing: 1.0,
   }
   // Where we come out. Captured before anything drives them, so these are the
   // values the shader was built with and the black hole is exactly itself.
@@ -208,6 +211,7 @@ import Lenis from 'lenis';
     bgTint: uniforms.bg_tint.value.clone(),
     spaceColorPlane: uniforms.space_color_plane.value.clone(),
     spaceColorPole: uniforms.space_color_pole.value.clone(),
+    bgLensing: 0.0,
   }
 
   // Phase boundaries, in viewport units of scroll. body height in style.css has
@@ -548,7 +552,7 @@ import Lenis from 'lenis';
     // toward the black hole. Every value below is a pure function of scroll, so
     // scrubbing backwards retraces it.
     const crossingStartDist = 22.0;
-    const crossingNearDist = 5.4;   // as close as we get before the dark
+    const crossingNearDist = 3.2;   // as close as we get before the dark
     const closeDist = 1.8;          // held through the passage
     // How far out we come up on the far side.
     //
@@ -850,6 +854,8 @@ import Lenis from 'lenis';
       BLACK_HOLE.spaceColorPlane, WORMHOLE.spaceColorPlane, mix)
     uniforms.space_color_pole.value.lerpVectors(
       BLACK_HOLE.spaceColorPole, WORMHOLE.spaceColorPole, mix)
+    uniforms.bg_lensing.value =
+      BLACK_HOLE.bgLensing + (WORMHOLE.bgLensing - BLACK_HOLE.bgLensing) * mix
   }
 
   let veilColor = ''
