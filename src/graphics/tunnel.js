@@ -136,7 +136,11 @@ const fragmentShader = /* glsl */ `
     // and at 0.055 it arrived as a dark snake lying across a lit wall. Reaching
     // roughly three times further keeps the tube reading as one continuous
     // surface all the way into the turn.
-    float headlight = exp(-dist * 0.018) * 1.2 + 0.14;
+    // Reach and intensity trade off. Tripling the reach without dropping the
+    // multiplier lights the near wall and the whole mid stretch at once, and the
+    // bloom pass takes that to a white screen — so the multiplier comes down by
+    // about the same factor the reach went up.
+    float headlight = exp(-dist * 0.018) * 0.5 + 0.06;
 
     vec3 color = mix(uColorNear, uColorFar, smoothstep(0.1, 1.0, toExit));
     color *= wall * headlight;
@@ -186,7 +190,7 @@ const fragmentShader = /* glsl */ `
     // that spreading the bright one floods the tube through bloom; the fix is a
     // second, dimmer falloff rather than a wider bright one.
     color += uColorFar * pow(toExit, 12.0) * uExitGlow * 0.45;
-    color += uColorFar * pow(toExit, 2.0) * (0.16 + 0.20 * uExitGlow);
+    color += uColorFar * pow(toExit, 2.0) * (0.10 + 0.12 * uExitGlow);
 
     gl_FragColor = vec4(color * uReveal, 1.0);
   }
