@@ -101,7 +101,6 @@ uniform float throat_bend_clamp; // radians of winding the far side is allowed t
 uniform float throat_twist;      // azimuthal drag, radians of spin per radian of bend
 uniform vec3 throat_spin_axis;   // the throat's own axis, NOT the line of sight
 uniform float throat_star_blur;  // widens the far side's stars so they stop aliasing into rings
-uniform float throat_supersample; // spread of the four averaged taps; 0 falls back to one tap and the blur above
 uniform vec3 throat_tint;       // multiplies the far side's stars and nebula
 uniform float throat_star_gain;
 uniform float throat_nebula_gain;
@@ -529,61 +528,21 @@ void main()	{
                         + cross(axis, through) * st
                         + axis * dot(axis, through) * (1.0 - ct));
 
-    // ── Supersampling the far side ──
-    // One ray per pixel is one direction, and inside the throat that is not
-    // enough: the mapping from screen to sky is steep, so a pixel covers a
-    // long stretch of the far sky and a single tap picks one arbitrary point
-    // out of it. Standing still that is noise; moving, the point jumps from
-    // one feature to the next between frames and the whole interior crawls.
+    // One tap, and the star blur rather than several jittered taps.
     //
-    // Several taps spread across the direction the pixel actually covers, and
-    // averaged, is the fix. Confined to here — it is the only place in the
-    // frame where the mapping is steep enough to need it, and the throat is a
-    // small part of the screen, so the cost is bounded.
-    //
-    // The spread grows with bend_eff because that is what makes the mapping
-    // steep in the first place: deep in, where a pixel's worth of screen
-    // covers most of a sky, the taps have to reach further apart to represent
-    // it. Golden-angle spiral rather than a cross, so no tap pattern lines up
-    // with the radial structure the throat is already full of.
-    //
-    // This also replaces the star blur while it runs. That widened the stars
-    // on the plate to stop them aliasing; jittering the direction does the
-    // same job, and does it for the nebula and the galaxy as well instead of
-    // for the star plate alone.
-    vec3 far_side = vec3(0.0);
-    if (throat_supersample > 0.0) {
-      vec3 tangent = abs(through.y) < 0.99
-        ? normalize(cross(through, vec3(0.0, 1.0, 0.0)))
-        : normalize(cross(through, vec3(1.0, 0.0, 0.0)));
-      vec3 bitangent = cross(through, tangent);
-      float spread = throat_supersample * (0.002 + 0.011 * bend_eff);
-
-      for (int i = 0; i < 4; i++) {
-        float fi = float(i);
-        float angle = 2.39996323 * fi;             // golden angle
-        float radius = spread * sqrt((fi + 0.5) * 0.25);
-        vec3 tap = normalize(through
-                             + tangent * (cos(angle) * radius)
-                             + bitangent * (sin(angle) * radius));
-
-        far_side += sample_sky(tap, throat_sky_rotation, throat_tint,
+    // The taps did resolve what one cannot — the mapping is steep enough in here
+    // that a pixel covers a long stretch of far sky — but averaging across that
+    // stretch is a blur by another name, and the streaked stars are the best
+    // thing in the frame. They are what the distortion is legible on. Trading
+    // their edges for a quieter interior is a bad trade.
+    vec3 far_side = sample_sky(through, throat_sky_rotation, throat_tint,
                                throat_color_plane, throat_color_pole,
-                               throat_star_gain, throat_nebula_gain, 1.0, 0.0);
-        // Sampled along the same bent directions as the stars, so it is warped
-        // by the throat rather than laid over it.
-        far_side += galaxy_band(tap, throat_band_pole, view,
-                                throat_band_color, throat_band_gain);
-      }
-      far_side *= 0.25;
-    } else {
-      far_side = sample_sky(through, throat_sky_rotation, throat_tint,
-                            throat_color_plane, throat_color_pole,
-                            throat_star_gain, throat_nebula_gain, 1.0,
-                            throat_star_blur);
-      far_side += galaxy_band(through, throat_band_pole, view,
-                              throat_band_color, throat_band_gain);
-    }
+                               throat_star_gain, throat_nebula_gain, 1.0,
+                               throat_star_blur);
+    // Sampled along the same bent direction as the stars, so it is warped by the
+    // throat rather than laid over it.
+    far_side += galaxy_band(through, throat_band_pole, view,
+                            throat_band_color, throat_band_gain);
 
     // There used to be a grazing-angle rim term here to give the throat an
     // edge. It did, but pow(rim, 3.0) is a function of the crossing angle
