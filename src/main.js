@@ -579,7 +579,11 @@ import Lenis from 'lenis';
     // toward the black hole. Every value below is a pure function of scroll, so
     // scrubbing backwards retraces it.
     const crossingStartDist = 22.0;
-    const crossingNearDist = 3.2;   // as close as we get before the dark
+    // As close as we get before the crossing. Pushed in from 3.2 so the mouth
+    // runs off every edge of the frame before the light takes over — with sky
+    // still visible around it, the handover reads as the surroundings being cut
+    // away rather than as going through something.
+    const crossingNearDist = 2.4;
     const closeDist = 1.8;          // held through the passage
     // How far out we come up on the far side.
     //
@@ -908,12 +912,28 @@ import Lenis from 'lenis';
         opacity = 1 - clamp01((tunnelProgress - 0.10) / 0.14)
       }
     } else {
-      // Starts early and closes fast. The throat is a light source filling most of
-      // the frame by this point, so a veil that is merely most of the way down
-      // reads as a grey wash over a bright disc rather than as going dark — it has
-      // to reach full black while there is still something behind it worth
-      // covering, not ease toward it.
-      opacity = smoothstep(clamp01((closeProgress - 0.05) / 0.5))
+      // Going in. The crossing is a burst of light rather than a fade to black.
+      //
+      // A fade to black is a cut with the lights off: the eye keeps its detail
+      // right up to the moment the frame empties, so it registers the throat
+      // being taken away. A flash gives it nothing to hold on to — everything
+      // blows out at once, and by the time it recovers it is somewhere else.
+      // That is what makes the handover read as going through the wormhole
+      // instead of the wormhole being removed.
+      //
+      // Warm rather than pure white, because it has to come out of the throat it
+      // is replacing, and the throat is copper.
+      const flash = smoothstep(clamp01((closeProgress - 0.06) / 0.30))
+
+      // The light then burns down to black over the back half, so the scene swap
+      // at blackoutEnd still happens under full black and the horizon message
+      // still lands on it. The flash covers the crossing; the black covers the
+      // machinery.
+      const settle = smoothstep(clamp01((closeProgress - 0.55) / 0.30))
+      const level = 1 - settle
+
+      opacity = flash
+      color = `rgb(${Math.round(255 * level)}, ${Math.round(236 * level)}, ${Math.round(214 * level)})`
     }
 
     if (color !== veilColor) {
