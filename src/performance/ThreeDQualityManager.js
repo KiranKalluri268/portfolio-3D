@@ -79,6 +79,13 @@ export class ThreeDQualityManager {
     this.mediumProbeElapsedMs = 0;
     this.mediumProbeHeavyFrames = 0;
 
+    // A tier chosen by hand stops the manager climbing, but not dropping. The
+    // safety net is protection and stays on; probing upward is ambition, and
+    // once someone has picked a tier the manager should stop having opinions
+    // about going higher. Without this the visitor watches it fight them:
+    // pick low, climb to medium, stumble, drop, wait, climb again.
+    this.userPinned = false;
+
     this.previousTimestampMs = null;
     this.latestFrameMs = 0;
     this.lastAdjustmentReason = 'startup';
@@ -103,6 +110,27 @@ export class ThreeDQualityManager {
     if (startCooldown) {
       this.cooldownRemainingMs = this.cooldownMs;
     }
+  }
+
+  // Pin the tier to a hand-picked choice. Auto-downgrade survives; auto-upgrade
+  // and the medium probe do not.
+  setUserTier(tier) {
+    if (!this.tiers.includes(tier)) return;
+
+    this.userPinned = true;
+    this.mediumProbeActive = false;
+    this.mediumProbeElapsedMs = 0;
+    this.mediumProbeHeavyFrames = 0;
+    // A hand-picked tier is also an answer to the benchmark. Leaving warmup
+    // incomplete would let it finish later and move the tier out from under
+    // the choice that was just made.
+    this.warmupComplete = true;
+    this.lastAdjustmentReason = 'user-selected';
+    this.setTier(tier);
+  }
+
+  clearUserTier() {
+    this.userPinned = false;
   }
 
   update(timestampMs = performance.now()) {
@@ -243,6 +271,11 @@ export class ThreeDQualityManager {
   }
 
   trackUpgradeHeadroom(frameMs) {
+    if (this.userPinned) {
+      this.upgradeStableElapsedMs = 0;
+      return;
+    }
+
     if (this.isHighestTier()) {
       this.upgradeStableElapsedMs = 0;
       return;
@@ -265,6 +298,8 @@ export class ThreeDQualityManager {
   }
 
   startMediumProbe() {
+    if (this.userPinned) return;
+
     this.lastAdjustmentReason = 'low-to-medium-probe';
     this.mediumProbeActive = true;
     this.mediumProbeElapsedMs = 0;
@@ -322,6 +357,11 @@ export class ThreeDQualityManager {
   }
 
   upgrade(reason) {
+    if (this.userPinned) {
+      this.upgradeStableElapsedMs = 0;
+      return;
+    }
+
     const tierIndex = this.tiers.indexOf(this.currentTier);
     if (tierIndex < 0 || tierIndex >= this.tiers.length - 1) {
       this.upgradeStableElapsedMs = 0;
@@ -380,6 +420,7 @@ export class ThreeDQualityManager {
       probeElapsedMs: this.mediumProbeElapsedMs,
       probeHeavyFrames: this.mediumProbeHeavyFrames,
       warmupComplete: this.warmupComplete,
+      userPinned: this.userPinned,
       reason: this.lastAdjustmentReason,
     };
   }

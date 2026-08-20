@@ -231,3 +231,53 @@ canvas {
   text-align: center;
   text-shadow: 0 2px 24px rgba(0, 0, 0, 0.65);
 }
+
+/* ── Preset switcher ─────────────────────── */
+/* Always visible, including on touch, where the lil-gui panel cannot be
+   opened. Sits immediately right of the stats.js panel, which is 80px wide —
+   the offset is that width plus a gap, so the two never overlap. Under the
+   loading overlay (z-index 20) so the entry moment is not shared with a
+   control, and above the veil so a downgrade during the transition is still
+   readable. */
+#preset-switcher {
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  left: calc(max(8px, env(safe-area-inset-left)) + 88px);
+  z-index: 17;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 245, 224, 0.18);
+  background: rgba(8, 6, 4, 0.72);
+  color: rgba(255, 245, 224, 0.82);
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#preset-switcher:hover,
+#preset-switcher:focus-visible {
+  color: #fff5e0;
+  border-color: rgba(255, 245, 224, 0.38);
+}
+
+/* The dropdown list itself is drawn by the OS and does not inherit the dark
+   background above, so the options are set explicitly or they render as light
+   text on a light menu. */
+#preset-switcher option {
+  background: #100b06;
+  color: #fff5e0;
+}
+
+/* ── Stats panel ─────────────────────────────────────────── */
+/* Always visible, not only behind Ctrl+Alt+C. Fixed rather than absolute so it
+   does not scroll away up the page. */
+#stats-panel {
+  position: fixed !important;
+  top: max(8px, env(safe-area-inset-top)) !important;
+  left: max(8px, env(safe-area-inset-left)) !important;
+  /* stats.js writes position/top/left/z-index inline, including z-index 10000,
+     which would float the panel over the loading overlay. Every one of these
+     has to win against that, hence !important throughout. */
+  z-index: 17 !important;
+}
