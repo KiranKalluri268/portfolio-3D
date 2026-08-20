@@ -199,6 +199,12 @@ import Lenis from 'lenis';
     // so shortening the swing above would otherwise have weakened it too.
     throat_twist: { type: "f", value: 5.0 },
     throat_star_blur: { type: "f", value: 1.0 },
+    // Four taps spread across the sky a pixel actually covers, averaged. Held
+    // low on purpose: this is meant to resolve what one tap cannot, not to
+    // soften the far side, and past about 2 the interior starts losing the fine
+    // structure the taps were added to keep. 0 turns it off and falls back to
+    // the single tap and the star blur above.
+    throat_supersample: { type: "f", value: 1.0 },
     throat_tint: { type: "v3", value: new THREE.Vector3(1.0, 0.66, 0.44) },
     throat_star_gain: { type: "f", value: 0.35 },
     throat_nebula_gain: { type: "f", value: 1.6 },
