@@ -4,6 +4,33 @@ Running notes on work that is parked mid-flight. Anything here is unfinished by
 choice, not forgotten — each section records where it was left, why, and what
 has to be decided before it can be picked up again.
 
+The journey itself is done: the crossing, the flash into the passage, the
+passage, and the fall all read the way they are meant to. Two things below are
+parked, and neither blocks anything.
+
+---
+
+## The wormhole-to-tunnel handover — flash, not a cross-fade
+
+**State:** shipped and good. Parked only in the sense that the more exact
+version of it was considered and deliberately not built.
+
+The seam is covered by overexposing the frame into a burst of light which then
+burns down to black; the scene swap happens under the black. Three pieces:
+the `exposure` uniform driving the whole render up, the bloom threshold dropping
+through the crossing to let that spread, and the DOM veil in
+`updateTransitionVeil()`. All three are needed — the veil alone is a white
+rectangle appearing in front of the scene, which goes bright without anything
+having got brighter.
+
+**The alternative, if the flash ever stops being enough:** render both the
+raymarcher and the tunnel for the few frames of the overlap and cross-fade
+between them. Exact, and expensive at the worst possible moment — the throat
+fills the screen right where the second scene would start rendering. It needs a
+render target and a compositing step that neither scene has today. The framing
+and colour work it depends on is already in place, so it can be built on top
+rather than instead.
+
 ---
 
 ## The planet — unmounted
@@ -206,7 +233,7 @@ Known-good waypoints, newest first:
 
 ### Reference
 
-The target frame is the Interstellar Gargantua still in `temp/goal.jpg`: planet
+The target frame is the Interstellar Gargantua still in `public/goal/last_frame.jpg`: planet
 small, dark, up and to the left, just outside the glow of the near-side arc.
 Note that the film still's own black hole is smaller in frame than ours at the
 end of the fall, so its planet sits ~3 shadow radii out where ours is inside 1 —

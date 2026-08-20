@@ -161,6 +161,7 @@ import Lenis from 'lenis';
     planet_texture: { type: "t", value: null },
     planet_amount: { type: "f", value: 0.0 },
     show_lensing: { type: "b", value: true },
+    exposure: { type: "f", value: 1.0 },
     bg_lensing: { type: "f", value: 0.0 },
     // Defaults reproduce the black hole exactly — the values below are the
     // constants they replaced in the shader. The journey drives them.
@@ -199,12 +200,6 @@ import Lenis from 'lenis';
     // so shortening the swing above would otherwise have weakened it too.
     throat_twist: { type: "f", value: 5.0 },
     throat_star_blur: { type: "f", value: 1.0 },
-    // Four taps spread across the sky a pixel actually covers, averaged. Held
-    // low on purpose: this is meant to resolve what one tap cannot, not to
-    // soften the far side, and past about 2 the interior starts losing the fine
-    // structure the taps were added to keep. 0 turns it off and falls back to
-    // the single tap and the star blur above.
-    throat_supersample: { type: "f", value: 1.0 },
     throat_tint: { type: "v3", value: new THREE.Vector3(1.0, 0.66, 0.44) },
     throat_star_gain: { type: "f", value: 0.35 },
     throat_nebula_gain: { type: "f", value: 1.6 },
@@ -579,7 +574,11 @@ import Lenis from 'lenis';
     // toward the black hole. Every value below is a pure function of scroll, so
     // scrubbing backwards retraces it.
     const crossingStartDist = 22.0;
-    const crossingNearDist = 3.2;   // as close as we get before the dark
+    // As close as we get before the crossing. Pushed in from 3.2 so the mouth
+    // runs off every edge of the frame before the light takes over — with sky
+    // still visible around it, the handover reads as the surroundings being cut
+    // away rather than as going through something.
+    const crossingNearDist = 2.4;
     const closeDist = 1.8;          // held through the passage
     // How far out we come up on the far side.
     //
@@ -705,6 +704,20 @@ import Lenis from 'lenis';
     // The two worlds swap outright rather than blending, because the swap happens
     // while the arrival veil is still fully opaque and nothing of it is on screen.
     updateWorldAppearance(pastTunnel ? 0 : 1);
+
+    // The scene blows out into the crossing rather than being covered up by
+    // something bright. An overlay on its own is a white rectangle appearing in
+    // front of the frame — it goes bright without anything having got brighter.
+    // Driving the whole render up means the throat itself overexposes, the bloom
+    // pass catches it and spreads it the way real overexposure spreads, and the
+    // veil arrives on top of a frame that is already blinding.
+    //
+    // Ramped over the front of the approach so the light is clearly coming out
+    // of the mouth, and only past the crossing does the veil take over.
+    uniforms.exposure.value = inTunnel || pastTunnel
+      ? 1.0
+      : 1.0 + 7.0 * smoothstep(clamp01((closeProgress - 0.02) / 0.30));
+
     updateTransitionVeil(closeProgress, tunnelProgress, arrivalProgress, inTunnel);
 
     // Set per phase. Nothing here is allowed to sit at threshold 0 — that is what
@@ -723,9 +736,16 @@ import Lenis from 'lenis';
       // The throat is a light source and it grows to fill the frame on the way
       // in, so the threshold climbs with it — held at its opening value the
       // crossing washes out long before the dark arrives to cover it.
-      bloomPass.strength = 0.95;
+      //
+      // Then it comes back down again through the crossing itself, and hard.
+      // The threshold is what decides whether the exposure surge above reads as
+      // a burst or as a flat bright frame: held at its approach value the
+      // overexposed throat sits there clipped and inert, and only by dropping
+      // the bar does the light actually leave the mouth and spill over the rest
+      // of the frame.
+      bloomPass.strength = 0.95 + 1.4 * closeEase;
       bloomPass.radius = 1.0;
-      bloomPass.threshold = 0.5 + 0.3 * Math.max(crossingEase, closeEase);
+      bloomPass.threshold = Math.max(0.05, 0.5 + 0.3 * crossingEase - 0.7 * closeEase);
     }
 
     tunnelActive = inTunnel;
@@ -908,12 +928,35 @@ import Lenis from 'lenis';
         opacity = 1 - clamp01((tunnelProgress - 0.10) / 0.14)
       }
     } else {
-      // Starts early and closes fast. The throat is a light source filling most of
-      // the frame by this point, so a veil that is merely most of the way down
-      // reads as a grey wash over a bright disc rather than as going dark — it has
-      // to reach full black while there is still something behind it worth
-      // covering, not ease toward it.
-      opacity = smoothstep(clamp01((closeProgress - 0.05) / 0.5))
+      // Going in. The crossing is a burst of light rather than a fade to black.
+      //
+      // A fade to black is a cut with the lights off: the eye keeps its detail
+      // right up to the moment the frame empties, so it registers the throat
+      // being taken away. A flash gives it nothing to hold on to — everything
+      // blows out at once, and by the time it recovers it is somewhere else.
+      // That is what makes the handover read as going through the wormhole
+      // instead of the wormhole being removed.
+      //
+      // Warm rather than pure white, because it has to come out of the throat it
+      // is replacing, and the throat is copper.
+      const flash = smoothstep(clamp01((closeProgress - 0.04) / 0.22))
+
+      // The light then burns down to black over the back half, so the scene swap
+      // at blackoutEnd still happens under full black and the horizon message
+      // still lands on it. The flash covers the crossing; the black covers the
+      // machinery.
+      const settle = smoothstep(clamp01((closeProgress - 0.55) / 0.30))
+      const level = 1 - settle
+
+      opacity = flash
+      // Warm at the leading edge and pure white at the peak. Holding it warm all
+      // the way through caps it at the brightness of the copper it came from,
+      // which is the difference between a bright frame and a frame that is too
+      // bright to look at.
+      const toWhite = smoothstep(clamp01((closeProgress - 0.14) / 0.16))
+      const g = (236 + 19 * toWhite) * level
+      const b = (214 + 41 * toWhite) * level
+      color = `rgb(${Math.round(255 * level)}, ${Math.round(g)}, ${Math.round(b)})`
     }
 
     if (color !== veilColor) {
