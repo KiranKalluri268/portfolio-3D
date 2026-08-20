@@ -100,8 +100,7 @@ uniform float throat_nebula_gain;
 
 // The galaxy lying across the far sky — the one thing through the throat with a
 // shape, and so the only thing whose distortion can be read.
-uniform vec3 throat_band_pole;   // normal of the disc it lies in
-uniform vec3 throat_band_core;   // bearing of its centre, within that disc
+uniform vec3 throat_band_pole;   // normal of the disc it lies in; only its part across the view is used
 uniform vec3 throat_band_color;
 uniform float throat_band_gain;  // 0 removes it entirely
 
@@ -208,18 +207,32 @@ vec3 star_at(vec2 tex_coord, vec3 tint, float star_gain, float doppler_factor){
 //
 // Low frequency throughout on purpose. Anything fine enough to alias would come
 // back as rings the same way the stars did.
-vec3 galaxy_band(vec3 dir, vec3 pole, vec3 core_dir, vec3 tint, float gain){
+vec3 galaxy_band(vec3 dir, vec3 pole, vec3 view, vec3 tint, float gain){
   // Half-thickness of the disc, in units of the sine of the angle off it. Wide
   // enough to stay a band rather than a line once the throat stretches it.
-  const float WIDTH = 0.16;
+  const float WIDTH = 0.11;
+
+  vec3 v = normalize(view);
+
+  // The pole is held square to the view, which puts the band's own plane through
+  // the view direction — so the band crosses the middle of the mouth instead of
+  // circling it. This is not cosmetic. The deflection sweeps a cone about the
+  // view whose angle grows with screen radius, so a band whose pole leans toward
+  // the view is very nearly one of those cones and comes back as an even ring
+  // hugging the rim, which is what the first attempt did: it read as more rim
+  // glow, indistinguishable from what was already there. Square to the view the
+  // band cuts across every cone instead of lying along one, and arrives as a
+  // stripe over the throat with the bending visible along it.
+  vec3 p = normalize(pole - v * dot(v, pole));
 
   vec3 n = normalize(dir);
-  vec3 p = normalize(pole);
   float lat = dot(n, p);              // 0 along the band, +-1 at its poles
   float belt = exp(-(lat*lat) / (WIDTH*WIDTH));
 
-  // Longitude measured from the core's bearing, dropped into the band's plane.
-  vec3 c = normalize(core_dir - p * dot(p, core_dir));
+  // Longitude from the core's bearing. The core is set a little off the view
+  // rather than on it, so the bulge sits inside the mouth but off its centre and
+  // the band has a near end and a far end to tell apart.
+  vec3 c = normalize(v + 0.45 * cross(p, v));
   vec3 t = cross(p, c);
   float lon = atan(dot(n, t), dot(n, c));
 
@@ -235,7 +248,7 @@ vec3 galaxy_band(vec3 dir, vec3 pole, vec3 core_dir, vec3 tint, float gain){
   // thing about a galaxy seen edge on, and more to the point it is one long
   // continuous curve — the clearest thing in the frame for the bending to act
   // on, and the only feature here whose warping can be followed by eye.
-  float lane = 1.0 - 0.78 * exp(-(lat*lat) / (WIDTH*WIDTH*0.045));
+  float lane = 1.0 - 0.92 * exp(-(lat*lat) / (WIDTH*WIDTH*0.10));
 
   return tint * gain * (belt*mottle*lane + bulge*1.6);
 }
@@ -441,7 +454,7 @@ void main()	{
 
       // Sampled along the same bent direction as the stars, so it is warped by
       // the throat rather than laid over it.
-      far_side += galaxy_band(through, throat_band_pole, throat_band_core,
+      far_side += galaxy_band(through, throat_band_pole, view,
                               throat_band_color, throat_band_gain);
 
       // There used to be a grazing-angle rim term here to give the throat an
