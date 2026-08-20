@@ -374,143 +374,10 @@ void main()	{
     bool horizon_mask = distSq < 1.0 && dot(oldpoint, oldpoint) > 1.0;// intersecting eventhorizon
     // does it enter event horizon?
     if (horizon_mask) {
-      // A black hole absorbs the ray. A wormhole is a hole — it hands back what
-      // is on the other side. Either way the ray terminates here, so everything
-      // outside still bends around the same mass and the lensing is untouched.
-      //
-      // velocity at the crossing is the fully bent direction, so the far sky
-      // arrives already swirled toward the rim: the crystal-ball distortion is
-      // the integrator's doing, not an effect layered on top. No doppler — the
-      // far side is not moving with respect to anything here.
-      vec3 vdir = normalize(velocity);
-      float bend = acos(clamp(dot(orig_ray_dir, vdir), -1.0, 1.0));
-
-      // Compressed, not capped. There is a radius on screen inside which every
-      // ray is captured and loops the throat before crossing, and outside which
-      // it crosses on the first pass — the same boundary that draws the black
-      // hole's shadow. It is a perfect circle. tanh saturated: every looped ray,
-      // whether it wound once or ten times, came back with the same deflection,
-      // so the whole capture disc went uniform while just outside it the image
-      // was still changing fast. Continuous in value, discontinuous in rate,
-      // which the eye reads as an edge — a flat window set into the lensing.
-      //
-      // log never saturates. It still matches bend for small bend and still
-      // pulls the deep winding back to something showable, but it keeps a
-      // gradient all the way in, so the two families run into each other.
-      float bend_eff = bend > 0.0001
-        ? throat_bend_clamp * log(1.0 + bend / throat_bend_clamp)
-        : bend;
-      vec3 through = normalize(mix(orig_ray_dir, vdir,
-                                   bend > 0.0001 ? bend_eff / bend : 1.0));
-
-      // ── Why this is here ──
-      // The acceleration above is central, so a ray never leaves the plane
-      // containing itself and the origin: every ray bends straight toward or
-      // away from the throat's centre on screen. The direction we end up
-      // sampling is therefore a function of one number — how far the ray passed
-      // from the centre — and two pixels at the same screen radius read the same
-      // latitude of the far sky. Concentric rings were not an artifact sitting
-      // on the image, they were what the mapping can produce.
-      //
-      // The drag below is what breaks that, but only because it turns about a
-      // fixed axis of the throat's own. Turning about the axis to the camera —
-      // which is what this did first — is useless for the purpose: that axis IS
-      // the symmetry axis of the screen image, so rotating about it slides
-      // points along the very circles the problem is made of. Latitude stays
-      // constant around each one and the rings survive as spirals.
-      //
-      // About a fixed axis, how far a ray is dragged depends on where it passed
-      // relative to that axis and not just on how close it came, so latitude
-      // varies with azimuth and screen-radius circles stop mapping to sky
-      // latitude circles. That is also the more honest version: a rotating
-      // throat has a spin axis of its own, and light's inclination to it is
-      // exactly what decides the drag.
-      // The drag rides on a bounded measure of the winding, not on bend_eff.
-      // bend_eff now grows without limit toward the centre, and a twist that
-      // grew with it would pass a full turn somewhere in the capture disc and
-      // wrap — a new circle to replace the one being removed here.
-      // Held perpendicular to the view. A rotation about any axis leaves that
-      // axis's two poles fixed, and a fixed point in a field of swirling is a
-      // centre — so wherever the axis pierces the far sky, a second centre
-      // appears next to the throat's own. Taking only the part of the tilt
-      // that is across the line of sight throws both poles out to the rim,
-      // where the throat's edge covers them, and leaves one centre in frame.
-      // Perpendicular is also the far end from the degenerate case: an axis
-      // along the view is the screen image's own symmetry axis and does no
-      // symmetry breaking at all.
-      vec3 view = normalize(cam_dir);
-      vec3 axis = normalize(throat_spin_axis - view * dot(view, throat_spin_axis));
-      float twist = throat_twist * throat_bend_clamp
-                  * tanh(bend / throat_bend_clamp);
-      float ct = cos(twist);
-      float st = sin(twist);
-      through = normalize(through * ct
-                          + cross(axis, through) * st
-                          + axis * dot(axis, through) * (1.0 - ct));
-
-      // ── Supersampling the far side ──
-      // One ray per pixel is one direction, and inside the throat that is not
-      // enough: the mapping from screen to sky is steep, so a pixel covers a
-      // long stretch of the far sky and a single tap picks one arbitrary point
-      // out of it. Standing still that is noise; moving, the point jumps from
-      // one feature to the next between frames and the whole interior crawls.
-      //
-      // Several taps spread across the direction the pixel actually covers, and
-      // averaged, is the fix. Confined to here — it is the only place in the
-      // frame where the mapping is steep enough to need it, and the throat is a
-      // small part of the screen, so the cost is bounded.
-      //
-      // The spread grows with bend_eff because that is what makes the mapping
-      // steep in the first place: deep in, where a pixel's worth of screen
-      // covers most of a sky, the taps have to reach further apart to represent
-      // it. Golden-angle spiral rather than a cross, so no tap pattern lines up
-      // with the radial structure the throat is already full of.
-      //
-      // This also replaces the star blur while it runs. That widened the stars
-      // on the plate to stop them aliasing; jittering the direction does the
-      // same job, and does it for the nebula and the galaxy as well instead of
-      // for the star plate alone.
-      vec3 far_side = vec3(0.0);
-      if (throat_supersample > 0.0) {
-        vec3 tangent = abs(through.y) < 0.99
-          ? normalize(cross(through, vec3(0.0, 1.0, 0.0)))
-          : normalize(cross(through, vec3(1.0, 0.0, 0.0)));
-        vec3 bitangent = cross(through, tangent);
-        float spread = throat_supersample * (0.002 + 0.011 * bend_eff);
-
-        for (int i = 0; i < 4; i++) {
-          float fi = float(i);
-          float angle = 2.39996323 * fi;             // golden angle
-          float radius = spread * sqrt((fi + 0.5) * 0.25);
-          vec3 tap = normalize(through
-                               + tangent * (cos(angle) * radius)
-                               + bitangent * (sin(angle) * radius));
-
-          far_side += sample_sky(tap, throat_sky_rotation, throat_tint,
-                                 throat_color_plane, throat_color_pole,
-                                 throat_star_gain, throat_nebula_gain, 1.0, 0.0);
-          // Sampled along the same bent directions as the stars, so it is warped
-          // by the throat rather than laid over it.
-          far_side += galaxy_band(tap, throat_band_pole, view,
-                                  throat_band_color, throat_band_gain);
-        }
-        far_side *= 0.25;
-      } else {
-        far_side = sample_sky(through, throat_sky_rotation, throat_tint,
-                              throat_color_plane, throat_color_pole,
-                              throat_star_gain, throat_nebula_gain, 1.0,
-                              throat_star_blur);
-        far_side += galaxy_band(through, throat_band_pole, view,
-                                throat_band_color, throat_band_gain);
-      }
-
-      // There used to be a grazing-angle rim term here to give the throat an
-      // edge. It did, but pow(rim, 3.0) is a function of the crossing angle
-      // alone, so it painted the same value all the way around every ray shell
-      // and stacked up as hard concentric rings inside the sphere. The swirled
-      // sky already reads as a boundary on its own, so the term is gone.
-
-      color += vec4(far_side * throat_throughput, 1.0);
+      // Nothing is shaded here. Everything this ray needs is already in
+      // velocity and distance, and both survive the loop — so the far side is
+      // worked out after it, once, instead of inside a body the compiler has to
+      // budget registers for on every one of the hundreds of steps. See below.
       break;
     }
     
@@ -568,6 +435,158 @@ void main()	{
     
   }
   
+  // ── The far side of the throat ──
+  // Out here rather than in the loop above, and that placement is the whole
+  // performance story. Everything below runs at most once per ray, but sitting
+  // inside the marching loop it was compiled as part of a body that executes
+  // hundreds of times: the register budget is set by the largest the body can
+  // ever get, so four sky taps and a galaxy in one arm of one branch cost
+  // occupancy on every single step, whether or not any ray ever crossed. Moving
+  // it out changed nothing about what is computed and gave the frame rate back.
+  //
+  // The gate on throat_throughput is the same economy for the black hole, which
+  // absorbs and has no far side to shade: it does not run this at all.
+  if (distance <= 1.0 && throat_throughput > 0.0) {
+
+    // A black hole absorbs the ray. A wormhole is a hole — it hands back what
+    // is on the other side. Either way the ray terminates here, so everything
+    // outside still bends around the same mass and the lensing is untouched.
+    //
+    // velocity at the crossing is the fully bent direction, so the far sky
+    // arrives already swirled toward the rim: the crystal-ball distortion is
+    // the integrator's doing, not an effect layered on top. No doppler — the
+    // far side is not moving with respect to anything here.
+    vec3 vdir = normalize(velocity);
+    float bend = acos(clamp(dot(orig_ray_dir, vdir), -1.0, 1.0));
+
+    // Compressed, not capped. There is a radius on screen inside which every
+    // ray is captured and loops the throat before crossing, and outside which
+    // it crosses on the first pass — the same boundary that draws the black
+    // hole's shadow. It is a perfect circle. tanh saturated: every looped ray,
+    // whether it wound once or ten times, came back with the same deflection,
+    // so the whole capture disc went uniform while just outside it the image
+    // was still changing fast. Continuous in value, discontinuous in rate,
+    // which the eye reads as an edge — a flat window set into the lensing.
+    //
+    // log never saturates. It still matches bend for small bend and still
+    // pulls the deep winding back to something showable, but it keeps a
+    // gradient all the way in, so the two families run into each other.
+    float bend_eff = bend > 0.0001
+      ? throat_bend_clamp * log(1.0 + bend / throat_bend_clamp)
+      : bend;
+    vec3 through = normalize(mix(orig_ray_dir, vdir,
+                                 bend > 0.0001 ? bend_eff / bend : 1.0));
+
+    // ── Why this is here ──
+    // The acceleration above is central, so a ray never leaves the plane
+    // containing itself and the origin: every ray bends straight toward or
+    // away from the throat's centre on screen. The direction we end up
+    // sampling is therefore a function of one number — how far the ray passed
+    // from the centre — and two pixels at the same screen radius read the same
+    // latitude of the far sky. Concentric rings were not an artifact sitting
+    // on the image, they were what the mapping can produce.
+    //
+    // The drag below is what breaks that, but only because it turns about a
+    // fixed axis of the throat's own. Turning about the axis to the camera —
+    // which is what this did first — is useless for the purpose: that axis IS
+    // the symmetry axis of the screen image, so rotating about it slides
+    // points along the very circles the problem is made of. Latitude stays
+    // constant around each one and the rings survive as spirals.
+    //
+    // About a fixed axis, how far a ray is dragged depends on where it passed
+    // relative to that axis and not just on how close it came, so latitude
+    // varies with azimuth and screen-radius circles stop mapping to sky
+    // latitude circles. That is also the more honest version: a rotating
+    // throat has a spin axis of its own, and light's inclination to it is
+    // exactly what decides the drag.
+    // The drag rides on a bounded measure of the winding, not on bend_eff.
+    // bend_eff now grows without limit toward the centre, and a twist that
+    // grew with it would pass a full turn somewhere in the capture disc and
+    // wrap — a new circle to replace the one being removed here.
+    // Held perpendicular to the view. A rotation about any axis leaves that
+    // axis's two poles fixed, and a fixed point in a field of swirling is a
+    // centre — so wherever the axis pierces the far sky, a second centre
+    // appears next to the throat's own. Taking only the part of the tilt
+    // that is across the line of sight throws both poles out to the rim,
+    // where the throat's edge covers them, and leaves one centre in frame.
+    // Perpendicular is also the far end from the degenerate case: an axis
+    // along the view is the screen image's own symmetry axis and does no
+    // symmetry breaking at all.
+    vec3 view = normalize(cam_dir);
+    vec3 axis = normalize(throat_spin_axis - view * dot(view, throat_spin_axis));
+    float twist = throat_twist * throat_bend_clamp
+                * tanh(bend / throat_bend_clamp);
+    float ct = cos(twist);
+    float st = sin(twist);
+    through = normalize(through * ct
+                        + cross(axis, through) * st
+                        + axis * dot(axis, through) * (1.0 - ct));
+
+    // ── Supersampling the far side ──
+    // One ray per pixel is one direction, and inside the throat that is not
+    // enough: the mapping from screen to sky is steep, so a pixel covers a
+    // long stretch of the far sky and a single tap picks one arbitrary point
+    // out of it. Standing still that is noise; moving, the point jumps from
+    // one feature to the next between frames and the whole interior crawls.
+    //
+    // Several taps spread across the direction the pixel actually covers, and
+    // averaged, is the fix. Confined to here — it is the only place in the
+    // frame where the mapping is steep enough to need it, and the throat is a
+    // small part of the screen, so the cost is bounded.
+    //
+    // The spread grows with bend_eff because that is what makes the mapping
+    // steep in the first place: deep in, where a pixel's worth of screen
+    // covers most of a sky, the taps have to reach further apart to represent
+    // it. Golden-angle spiral rather than a cross, so no tap pattern lines up
+    // with the radial structure the throat is already full of.
+    //
+    // This also replaces the star blur while it runs. That widened the stars
+    // on the plate to stop them aliasing; jittering the direction does the
+    // same job, and does it for the nebula and the galaxy as well instead of
+    // for the star plate alone.
+    vec3 far_side = vec3(0.0);
+    if (throat_supersample > 0.0) {
+      vec3 tangent = abs(through.y) < 0.99
+        ? normalize(cross(through, vec3(0.0, 1.0, 0.0)))
+        : normalize(cross(through, vec3(1.0, 0.0, 0.0)));
+      vec3 bitangent = cross(through, tangent);
+      float spread = throat_supersample * (0.002 + 0.011 * bend_eff);
+
+      for (int i = 0; i < 4; i++) {
+        float fi = float(i);
+        float angle = 2.39996323 * fi;             // golden angle
+        float radius = spread * sqrt((fi + 0.5) * 0.25);
+        vec3 tap = normalize(through
+                             + tangent * (cos(angle) * radius)
+                             + bitangent * (sin(angle) * radius));
+
+        far_side += sample_sky(tap, throat_sky_rotation, throat_tint,
+                               throat_color_plane, throat_color_pole,
+                               throat_star_gain, throat_nebula_gain, 1.0, 0.0);
+        // Sampled along the same bent directions as the stars, so it is warped
+        // by the throat rather than laid over it.
+        far_side += galaxy_band(tap, throat_band_pole, view,
+                                throat_band_color, throat_band_gain);
+      }
+      far_side *= 0.25;
+    } else {
+      far_side = sample_sky(through, throat_sky_rotation, throat_tint,
+                            throat_color_plane, throat_color_pole,
+                            throat_star_gain, throat_nebula_gain, 1.0,
+                            throat_star_blur);
+      far_side += galaxy_band(through, throat_band_pole, view,
+                              throat_band_color, throat_band_gain);
+    }
+
+    // There used to be a grazing-angle rim term here to give the throat an
+    // edge. It did, but pow(rim, 3.0) is a function of the crossing angle
+    // alone, so it painted the same value all the way around every ray shell
+    // and stacked up as hard concentric rings inside the sphere. The swirled
+    // sky already reads as a boundary on its own, so the term is gone.
+
+    color += vec4(far_side * throat_throughput, 1.0);
+  }
+
   if (distance > 1.0){
 
     // ── Background ──
