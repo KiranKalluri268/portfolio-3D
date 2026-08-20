@@ -63,6 +63,7 @@ const fragmentShader = /* glsl */ `
   uniform float uReveal;
   uniform vec3  uColorNear;
   uniform vec3  uColorFar;
+  uniform vec3  uExitLight;
 
   float hash(vec2 i, float period) {
     i.x = mod(i.x, period);
@@ -194,8 +195,8 @@ const fragmentShader = /* glsl */ `
     // The wide term is kept shallow on purpose. The original note here was right
     // that spreading the bright one floods the tube through bloom; the fix is a
     // second, dimmer falloff rather than a wider bright one.
-    color += uColorFar * pow(toExit, 12.0) * uExitGlow * 0.45;
-    color += uColorFar * pow(toExit, 2.0) * (0.16 + 0.16 * uExitGlow);
+    color += uColorFar * pow(toExit, 12.0) * uExitGlow * 0.28;
+    color += uColorFar * pow(toExit, 2.0) * (0.11 + 0.10 * uExitGlow);
 
     // A third, flat term over the whole tube. The two above are both powers of
     // toExit, so everything they give is concentrated at the far end — the
@@ -206,6 +207,20 @@ const fragmentShader = /* glsl */ `
     // instead of on top of the exit, which is already at the bloom threshold.
     color += mix(uColorNear, uColorFar, toExit)
            * (0.40 + 0.60 * wall) * 0.20 * (1.0 - 0.6 * toExit);
+
+    // ── The ellipse at the end ──
+    // The tube's far opening is a circle cut square across the curve, and by the
+    // time we see it the curve has turned — so it is presented at an angle and
+    // arrives on screen as an ellipse. Nothing is wrong with it; it is simply
+    // what a round hole looks like from off to one side, and no amount of
+    // geometry avoids it while there is a crisp boundary between wall and
+    // opening.
+    //
+    // So take the boundary away. Over the last stretch the wall is carried into
+    // the same light that fills the opening, and the two meet with nothing
+    // between them to draw an edge. The hole stops being a shape and becomes the
+    // place the light is coming from.
+    color = mix(color, uExitLight, smoothstep(0.86, 1.0, toExit));
 
     gl_FragColor = vec4(color * uReveal, 1.0);
   }
@@ -245,6 +260,9 @@ export function createTunnel(aspect = 1) {
     // passage in between was the one violet stretch of the whole journey.
     uColorNear: { value: new THREE.Color(0x7a4020) },
     uColorFar: { value: new THREE.Color(0xffdcc0) },
+    // Kept equal to the scene background, which is what fills the opening. The
+    // wall fades into this at the very end so the two never meet at an edge.
+    uExitLight: { value: new THREE.Color(0x000000) },
   };
 
   const material = new THREE.ShaderMaterial({
@@ -329,6 +347,7 @@ export function createTunnel(aspect = 1) {
     // frame by the time we reach it rather than merely the least dark.
     const exit = Math.min(1, (0.35 + Math.max(0, (progress - 0.45) / 0.55) * 0.65) * reveal);
     exitLight.setRGB(exit, exit * (0.80 + 0.20 * exit), exit * (0.62 + 0.38 * exit));
+    uniforms.uExitLight.value.copy(exitLight);
   }
 
   // The plates arrive with the rest of the loader, after the tunnel is built.
