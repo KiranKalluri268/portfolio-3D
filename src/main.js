@@ -186,16 +186,35 @@ import Lenis from 'lenis';
     throat_sky_rotation: { type: "f", value: 40.0 },
     throat_color_plane: { type: "v3", value: new THREE.Vector3(0.020, 0.009, 0.007) },
     throat_color_pole: { type: "v3", value: new THREE.Vector3(0.006, 0.002, 0.002) },
-    throat_bend_clamp: { type: "f", value: 0.5 },
+    // Sets how hard the deflection is compressed, and with it how far into the
+    // sky the deep interior is allowed to swing. The spin axis sits square to
+    // the view, so its poles are a quarter turn out; keeping the swing short of
+    // that keeps them off screen entirely rather than merely near the rim.
+    throat_bend_clamp: { type: "f", value: 0.3 },
     // Tilted off every scene axis on purpose. Aligned with the view or with the
     // disk normal it lines back up with the screen's own symmetry and the rings
     // start coming back.
     throat_spin_axis: { type: "v3", value: new THREE.Vector3(0.35, 0.82, 0.45).normalize() },
-    throat_twist: { type: "f", value: 3.5 },
+    // Raised to hold the drag where it was: the twist is scaled by the clamp,
+    // so shortening the swing above would otherwise have weakened it too.
+    throat_twist: { type: "f", value: 5.0 },
     throat_star_blur: { type: "f", value: 1.0 },
+    // Four taps spread across the sky a pixel actually covers, averaged. Held
+    // low on purpose: this is meant to resolve what one tap cannot, not to
+    // soften the far side, and past about 2 the interior starts losing the fine
+    // structure the taps were added to keep. 0 turns it off and falls back to
+    // the single tap and the star blur above.
+    throat_supersample: { type: "f", value: 1.0 },
     throat_tint: { type: "v3", value: new THREE.Vector3(1.0, 0.66, 0.44) },
     throat_star_gain: { type: "f", value: 0.35 },
     throat_nebula_gain: { type: "f", value: 1.6 },
+    // The galaxy on the far side. Only the part of this pole across the line of
+    // sight is used, so what it really sets is the angle the band lies at over
+    // the mouth; the shader holds it square to the view so the band crosses the
+    // middle rather than circling the rim.
+    throat_band_pole: { type: "v3", value: new THREE.Vector3(0.30, 0.88, -0.37).normalize() },
+    throat_band_color: { type: "v3", value: new THREE.Vector3(0.075, 0.050, 0.034) },
+    throat_band_gain: { type: "f", value: 1.0 },
   }
 
   // Where we start: warm sky, and no accretion disk. The disk is the black
