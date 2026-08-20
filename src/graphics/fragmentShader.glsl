@@ -70,6 +70,13 @@ uniform sampler2D planet_texture;
 uniform float planet_amount;        // 0 outside the new world, and the target is not even drawn
 uniform bool show_lensing;
 
+// Whole-frame gain, applied last. 1.0 everywhere except the crossing, where it
+// is driven up hard so the throat blows out on its own before the veil covers
+// it. A flash that lives only in the overlay is a white rectangle appearing in
+// front of the scene; the light has to come off the thing we are flying into,
+// and it has to reach the bloom pass to spread the way real overexposure does.
+uniform float exposure;
+
 // ── World appearance ────────────────────────────────────────────────────────
 // The same geodesic renders both worlds. Only what the horizon and the sky are
 // made of changes, so the lensing that sells the black hole also sells the
@@ -682,5 +689,5 @@ void main()	{
   // Added last so it lies over the planet, which is far outside it.
   color.rgb += disk_glow;
 
-  gl_FragColor = color*ray_intensity;
+  gl_FragColor = color*ray_intensity*exposure;
 }
