@@ -140,7 +140,12 @@ const fragmentShader = /* glsl */ `
     // multiplier lights the near wall and the whole mid stretch at once, and the
     // bloom pass takes that to a white screen — so the multiplier comes down by
     // about the same factor the reach went up.
-    float headlight = exp(-dist * 0.018) * 0.5 + 0.06;
+    // The floor is what stops any stretch of wall reaching black. It matters
+    // more than the multiplier does for how lit the passage feels: the lit
+    // patch travelling with the ship was never the problem, the unlit rest of
+    // the tube was. Raised well above the old 0.06, where the wall between the
+    // headlight and the exit glow fell into a dead band.
+    float headlight = exp(-dist * 0.018) * 0.58 + 0.16;
 
     vec3 color = mix(uColorNear, uColorFar, smoothstep(0.1, 1.0, toExit));
     color *= wall * headlight;
@@ -190,7 +195,17 @@ const fragmentShader = /* glsl */ `
     // that spreading the bright one floods the tube through bloom; the fix is a
     // second, dimmer falloff rather than a wider bright one.
     color += uColorFar * pow(toExit, 12.0) * uExitGlow * 0.45;
-    color += uColorFar * pow(toExit, 2.0) * (0.10 + 0.12 * uExitGlow);
+    color += uColorFar * pow(toExit, 2.0) * (0.16 + 0.16 * uExitGlow);
+
+    // A third, flat term over the whole tube. The two above are both powers of
+    // toExit, so everything they give is concentrated at the far end — the
+    // stretch immediately around the ship gets nothing from either and is lit by
+    // the headlight alone. This is the light that is simply in here with us.
+    // Carries the wall's own structure rather than washing flat over it, and
+    // weighted toward the near end so it adds where the light was missing
+    // instead of on top of the exit, which is already at the bloom threshold.
+    color += mix(uColorNear, uColorFar, toExit)
+           * (0.40 + 0.60 * wall) * 0.20 * (1.0 - 0.6 * toExit);
 
     gl_FragColor = vec4(color * uReveal, 1.0);
   }
