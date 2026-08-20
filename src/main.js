@@ -202,6 +202,15 @@ import Lenis from 'lenis';
     throat_tint: { type: "v3", value: new THREE.Vector3(1.0, 0.66, 0.44) },
     throat_star_gain: { type: "f", value: 0.35 },
     throat_nebula_gain: { type: "f", value: 1.6 },
+    // The galaxy on the far side. Its pole is tilted well off the line of sight
+    // so the band crosses the mouth at an angle rather than lying flat across
+    // it, and its core is set off to one side so the band has a near end and a
+    // far end — a band that is symmetric about the middle of the throat gives
+    // the bending nothing to show.
+    throat_band_pole: { type: "v3", value: new THREE.Vector3(0.30, 0.88, -0.37).normalize() },
+    throat_band_core: { type: "v3", value: new THREE.Vector3(-0.62, 0.10, -0.78).normalize() },
+    throat_band_color: { type: "v3", value: new THREE.Vector3(0.055, 0.038, 0.028) },
+    throat_band_gain: { type: "f", value: 1.0 },
   }
 
   // Where we start: warm sky, and no accretion disk. The disk is the black

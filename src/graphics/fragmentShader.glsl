@@ -98,6 +98,13 @@ uniform vec3 throat_tint;       // multiplies the far side's stars and nebula
 uniform float throat_star_gain;
 uniform float throat_nebula_gain;
 
+// The galaxy lying across the far sky — the one thing through the throat with a
+// shape, and so the only thing whose distortion can be read.
+uniform vec3 throat_band_pole;   // normal of the disc it lies in
+uniform vec3 throat_band_core;   // bearing of its centre, within that disc
+uniform vec3 throat_band_color;
+uniform float throat_band_gain;  // 0 removes it entirely
+
 
 
 vec2 square_frame(vec2 screen_size){
@@ -186,6 +193,51 @@ vec3 star_at(vec2 tex_coord, vec3 tint, float star_gain, float doppler_factor){
   if (doppler_shift)
     star_temperature /= doppler_factor*star_doppler_factor;
   return temp_to_color(star_temperature) * tint * star_color.g * star_gain;
+}
+
+// A galaxy lying across the far sky.
+//
+// Everything the throat shows is stars, and a star is a point. A point has no
+// shape to distort, so a field of them carries no information about what the
+// mapping is doing to it — they land where the mapping puts them and the eye
+// reads the arrangement, which is circles, because that is what the mapping
+// makes. Distortion is only legible on something that had a form to begin with:
+// a band that should be straight and is bent, a lane that should be even and is
+// pinched. That is the whole reason this exists. It is not decoration on the far
+// side, it is the thing the lensing is applied to.
+//
+// Low frequency throughout on purpose. Anything fine enough to alias would come
+// back as rings the same way the stars did.
+vec3 galaxy_band(vec3 dir, vec3 pole, vec3 core_dir, vec3 tint, float gain){
+  // Half-thickness of the disc, in units of the sine of the angle off it. Wide
+  // enough to stay a band rather than a line once the throat stretches it.
+  const float WIDTH = 0.16;
+
+  vec3 n = normalize(dir);
+  vec3 p = normalize(pole);
+  float lat = dot(n, p);              // 0 along the band, +-1 at its poles
+  float belt = exp(-(lat*lat) / (WIDTH*WIDTH));
+
+  // Longitude measured from the core's bearing, dropped into the band's plane.
+  vec3 c = normalize(core_dir - p * dot(p, core_dir));
+  vec3 t = cross(p, c);
+  float lon = atan(dot(n, t), dot(n, c));
+
+  // The bulge: brighter and thicker toward the core, the way the middle of a
+  // disc galaxy swells out of it. Gives the band one end that is unmistakably
+  // its centre, so a stretch along its length is visible as a stretch.
+  float bulge = exp(-(lon*lon) / 0.9) * exp(-(lat*lat) / (WIDTH*WIDTH*4.0));
+
+  // Slow variation down the length so it is not an even stripe.
+  float mottle = 0.72 + 0.28*sin(lon*2.0 + 0.9) + 0.16*sin(lon*3.0 - 2.1);
+
+  // The dust lane. A thin dark line down the middle is the most recognisable
+  // thing about a galaxy seen edge on, and more to the point it is one long
+  // continuous curve — the clearest thing in the frame for the bending to act
+  // on, and the only feature here whose warping can be followed by eye.
+  float lane = 1.0 - 0.78 * exp(-(lat*lat) / (WIDTH*WIDTH*0.045));
+
+  return tint * gain * (belt*mottle*lane + bulge*1.6);
 }
 
 vec3 sample_sky(vec3 dir, float rotation, vec3 tint, vec3 plane_color, vec3 pole_color,
@@ -386,6 +438,11 @@ void main()	{
                                  throat_color_plane, throat_color_pole,
                                  throat_star_gain, throat_nebula_gain, 1.0,
                                  throat_star_blur);
+
+      // Sampled along the same bent direction as the stars, so it is warped by
+      // the throat rather than laid over it.
+      far_side += galaxy_band(through, throat_band_pole, throat_band_core,
+                              throat_band_color, throat_band_gain);
 
       // There used to be a grazing-angle rim term here to give the throat an
       // edge. It did, but pow(rim, 3.0) is a function of the crossing angle
