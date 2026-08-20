@@ -198,6 +198,17 @@ const fragmentShader = /* glsl */ `
 
 export function createTunnel(aspect = 1) {
   const scene = new THREE.Scene();
+
+  // What fills the aperture at the far end. The tube is closed all the way
+  // around and the camera is inside it, so the only thing this is ever seen
+  // through is the exit — which makes the scene's own background the light at
+  // the end of it. No geometry, so no edge, so nothing for the tube's facets to
+  // interleave with: the ring the mouth disc kept drawing cannot come back.
+  //
+  // Driven from black on the same ramp the disc used, so the arrival still reads
+  // as arriving somewhere rather than as a light that was always on.
+  const exitLight = new THREE.Color(0x000000);
+  scene.background = exitLight;
   const camera = new THREE.PerspectiveCamera(78, aspect, 0.1, 2000);
 
   const curve = new THREE.CatmullRomCurve3(
@@ -238,25 +249,20 @@ export function createTunnel(aspect = 1) {
   const walls = new THREE.Mesh(geometry, material);
   scene.add(walls);
 
-  // The mouth we are heading for. Additive so bloom picks it up as a light
-  // source rather than a lit surface.
-  const mouthGeometry = new THREE.CircleGeometry(TUNNEL_RADIUS * 0.995, 96);
-  const mouthMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0,
-    blending: THREE.AdditiveBlending,
-    // Not written, but still tested — now that the walls write depth this is
-    // what lets a bend actually hide the exit light until we come round it.
-    depthWrite: false,
-  });
-  const mouth = new THREE.Mesh(mouthGeometry, mouthMaterial);
-  // Sits on the end of the curve rather than on the axis, and faces back down
-  // it — on a straight tube those were the same thing, on a bent one they are
-  // not, and a mouth left at the origin's -Z ends up embedded in the wall.
-  mouth.position.copy(curve.getPointAt(1));
-  mouth.lookAt(curve.getPointAt(0.985));
-  scene.add(mouth);
+  // There is no mouth disc any more.
+  //
+  // It existed to stop the far end reading as a hole, but the tube's end is a
+  // ring of flat facets rather than a circle, and any disc drawn across it has
+  // an edge that has to meet those facets somewhere. Hard edged, they interleave
+  // and each facet bites a notch out of it — a ring of black dots. Soft edged,
+  // the falloff itself is darker than the blown-out wall around it and reads as
+  // a dark ring. Both are the same problem wearing different clothes: a separate
+  // surface sitting in the one place where everything else is brightest.
+  //
+  // The wall's own exit glow already carries the arrival — it climbs into the
+  // bloom threshold over the last third and takes the whole end of the tube
+  // white, which is what the disc was there to do. Nothing to interleave with,
+  // so nothing to draw a ring.
 
   // Scratch vectors, reused every frame so the flight allocates nothing.
   const position = new THREE.Vector3();
@@ -303,14 +309,11 @@ export function createTunnel(aspect = 1) {
     // The mouth only starts to bite in the last third, so the arrival reads as
     // arriving somewhere rather than a light that was always on.
     uniforms.uExitGlow.value = Math.max(0, (progress - 0.35) / 0.65);
-    // Floored rather than ramped from nothing, for the same reason as the wide
-    // glow above — an unlit mouth is a hole, not a destination.
-    //
-    // The floor has to clear what the walls around it are adding, not just be
-    // above zero. Additive at 0.12 against a far wall already glowing harder
-    // than that is what made the mouth read as a dark plug punched in the middle
-    // of the light: it was drawn, just dimmer than its surroundings.
-    mouthMaterial.opacity = (0.35 + Math.max(0, (progress - 0.45) / 0.55) * 0.35) * reveal;
+
+    // Warm at first and running to white, so the exit is the brightest thing in
+    // frame by the time we reach it rather than merely the least dark.
+    const exit = Math.min(1, (0.35 + Math.max(0, (progress - 0.45) / 0.55) * 0.65) * reveal);
+    exitLight.setRGB(exit, exit * (0.80 + 0.20 * exit), exit * (0.62 + 0.38 * exit));
   }
 
   // The plates arrive with the rest of the loader, after the tunnel is built.
@@ -343,8 +346,6 @@ export function createTunnel(aspect = 1) {
   function dispose() {
     geometry.dispose();
     material.dispose();
-    mouthGeometry.dispose();
-    mouthMaterial.dispose();
     ownedTextures.forEach((t) => t.dispose());
     ownedTextures = [];
   }
