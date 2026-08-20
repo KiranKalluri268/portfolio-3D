@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { createCamera, createRenderer, createScene, createShaderProjectionPlane, loadTextures, createParticleSystem } from './graphics/render';
 import { createStatsGUI } from './gui/statsGUI';
 import { createConfigGUI } from './gui/datGUI';
+import { createPresetSwitcher } from './gui/presetSwitcher';
 import { ThreeDQualityManager } from './performance/ThreeDQualityManager';
 import { createStoryOverlay } from './story/StoryOverlay';
 import { createTunnel } from './graphics/tunnel';
@@ -334,13 +335,24 @@ import Lenis from 'lenis';
     applyPerformancePreset,
     saveToScreenshot,
     applyConfigChange,
-    isVisible => {
-      stats.dom.style.display = isVisible ? 'block' : 'none'
-    }
+    // The stats panel is always visible now, so toggling the lil-gui panel no
+    // longer shows or hides it.
+    () => {}
   ));
   const stats = createStatsGUI();
-  stats.dom.style.display = 'none';
   document.body.appendChild(stats.dom);
+
+  // A hand-picked preset pins the manager: it may still drop the tier to protect
+  // the frame rate, but it stops probing upward. Selecting the tier already
+  // running still pins it, which is how you hold a tier the benchmark would
+  // otherwise have moved.
+  const presetSwitcher = createPresetSwitcher({
+    onSelect: (tier) => {
+      qualityManager?.setUserTier(tier);
+      applyPerformancePreset(tier, false);
+      presetSwitcher.setTier(tier);
+    },
+  });
 
   const DEFAULT_ELEVATION = 5 * Math.PI / 180 // 5° — default camera elevation above disk
 
@@ -465,9 +477,12 @@ import Lenis from 'lenis';
     lowToMediumProbeMs: 8000,
     mediumProbeEvaluationMs: 4000,
     failedProbeCooldownMs: 20000,
-    allowHighAutoUpgrade: false,
+    allowHighAutoUpgrade: true,
     onQualityDowngrade: (newTier, { reason }) => {
       console.log("Quality Manager: Downgraded to " + newTier + " (" + reason + ")");
+      // The dropdown follows a safety downgrade: it shows what is running, not
+      // what was asked for, so an overridden selection is visible immediately.
+      presetSwitcher.setTier(newTier);
       if (benchmarkStarted && !initialQualityBenchmarkComplete) {
         setLoadingStage(`Adjusting graphics to ${newTier}...`, 93)
       }
@@ -475,6 +490,7 @@ import Lenis from 'lenis';
     },
     onQualityUpgrade: (newTier, { reason }) => {
       console.log("Quality Manager: Upgraded to " + newTier + " (" + reason + ")");
+      presetSwitcher.setTier(newTier);
       if (benchmarkStarted && !initialQualityBenchmarkComplete) {
         setLoadingStage(`Testing ${newTier} graphics...`, 96)
       }
@@ -508,6 +524,7 @@ import Lenis from 'lenis';
   });
 
   applyPerformancePreset('medium', false);
+  presetSwitcher.setTier('medium');
   applyInitialConfig();
   handleResize()
 
@@ -1027,6 +1044,7 @@ import Lenis from 'lenis';
     lenis.destroy();
     cameraControl.dispose();
     disposeGUI();
+    presetSwitcher.dispose();
     storyOverlay.dispose();
     disposeParticleSystem();
     disposeTunnel();

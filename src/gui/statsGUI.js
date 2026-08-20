@@ -2,8 +2,8 @@ import Stats from 'stats.js';
 
 export function createStatsGUI() {
   const stats = new Stats()
-  stats.dom.style.position = 'absolute'
-  stats.dom.style.left = '0px'
-  stats.dom.style.top = '0px'
+  // Positioning lives in style.css so the preset switcher can be placed against
+  // this panel's width without the two definitions drifting apart.
+  stats.dom.id = 'stats-panel'
   return stats;
 }
