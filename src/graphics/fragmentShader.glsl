@@ -319,13 +319,20 @@ void main()	{
       vec3 vdir = normalize(velocity);
       float bend = acos(clamp(dot(orig_ray_dir, vdir), -1.0, 1.0));
 
-      // Compressed with tanh rather than clipped with min(). Both cap the bend
-      // at throat_bend_clamp, but min() has a kink where it engages and that
-      // kink is a circle on screen — a faint hard edge partway out from the
-      // centre. tanh flattens into the same cap with a continuous derivative,
-      // so there is no radius at which the image changes character.
+      // Compressed, not capped. There is a radius on screen inside which every
+      // ray is captured and loops the throat before crossing, and outside which
+      // it crosses on the first pass — the same boundary that draws the black
+      // hole's shadow. It is a perfect circle. tanh saturated: every looped ray,
+      // whether it wound once or ten times, came back with the same deflection,
+      // so the whole capture disc went uniform while just outside it the image
+      // was still changing fast. Continuous in value, discontinuous in rate,
+      // which the eye reads as an edge — a flat window set into the lensing.
+      //
+      // log never saturates. It still matches bend for small bend and still
+      // pulls the deep winding back to something showable, but it keeps a
+      // gradient all the way in, so the two families run into each other.
       float bend_eff = bend > 0.0001
-        ? throat_bend_clamp * tanh(bend / throat_bend_clamp)
+        ? throat_bend_clamp * log(1.0 + bend / throat_bend_clamp)
         : bend;
       vec3 through = normalize(mix(orig_ray_dir, vdir,
                                    bend > 0.0001 ? bend_eff / bend : 1.0));
@@ -352,8 +359,23 @@ void main()	{
       // latitude circles. That is also the more honest version: a rotating
       // throat has a spin axis of its own, and light's inclination to it is
       // exactly what decides the drag.
-      vec3 axis = normalize(throat_spin_axis);
-      float twist = throat_twist * bend_eff;
+      // The drag rides on a bounded measure of the winding, not on bend_eff.
+      // bend_eff now grows without limit toward the centre, and a twist that
+      // grew with it would pass a full turn somewhere in the capture disc and
+      // wrap — a new circle to replace the one being removed here.
+      // Held perpendicular to the view. A rotation about any axis leaves that
+      // axis's two poles fixed, and a fixed point in a field of swirling is a
+      // centre — so wherever the axis pierces the far sky, a second centre
+      // appears next to the throat's own. Taking only the part of the tilt
+      // that is across the line of sight throws both poles out to the rim,
+      // where the throat's edge covers them, and leaves one centre in frame.
+      // Perpendicular is also the far end from the degenerate case: an axis
+      // along the view is the screen image's own symmetry axis and does no
+      // symmetry breaking at all.
+      vec3 view = normalize(cam_dir);
+      vec3 axis = normalize(throat_spin_axis - view * dot(view, throat_spin_axis));
+      float twist = throat_twist * throat_bend_clamp
+                  * tanh(bend / throat_bend_clamp);
       float ct = cos(twist);
       float st = sin(twist);
       through = normalize(through * ct

@@ -186,12 +186,18 @@ import Lenis from 'lenis';
     throat_sky_rotation: { type: "f", value: 40.0 },
     throat_color_plane: { type: "v3", value: new THREE.Vector3(0.020, 0.009, 0.007) },
     throat_color_pole: { type: "v3", value: new THREE.Vector3(0.006, 0.002, 0.002) },
-    throat_bend_clamp: { type: "f", value: 0.5 },
+    // Sets how hard the deflection is compressed, and with it how far into the
+    // sky the deep interior is allowed to swing. The spin axis sits square to
+    // the view, so its poles are a quarter turn out; keeping the swing short of
+    // that keeps them off screen entirely rather than merely near the rim.
+    throat_bend_clamp: { type: "f", value: 0.3 },
     // Tilted off every scene axis on purpose. Aligned with the view or with the
     // disk normal it lines back up with the screen's own symmetry and the rings
     // start coming back.
     throat_spin_axis: { type: "v3", value: new THREE.Vector3(0.35, 0.82, 0.45).normalize() },
-    throat_twist: { type: "f", value: 3.5 },
+    // Raised to hold the drag where it was: the twist is scaled by the clamp,
+    // so shortening the swing above would otherwise have weakened it too.
+    throat_twist: { type: "f", value: 5.0 },
     throat_star_blur: { type: "f", value: 1.0 },
     throat_tint: { type: "v3", value: new THREE.Vector3(1.0, 0.66, 0.44) },
     throat_star_gain: { type: "f", value: 0.35 },
