@@ -352,6 +352,9 @@ import Lenis from 'lenis';
       applyPerformancePreset(tier, false);
       presetSwitcher.setTier(tier);
     },
+    onLockChange: (locked) => {
+      qualityManager?.setLocked(locked);
+    },
   });
 
   const DEFAULT_ELEVATION = 5 * Math.PI / 180 // 5° — default camera elevation above disk

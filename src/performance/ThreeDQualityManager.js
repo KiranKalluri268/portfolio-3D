@@ -86,6 +86,11 @@ export class ThreeDQualityManager {
     // pick low, climb to medium, stumble, drop, wait, climb again.
     this.userPinned = false;
 
+    // A locked tier refuses every automatic change, including the safety
+    // downgrade a pin still allows. This exists for testing a tier under
+    // conditions that would otherwise trigger a panic/heavy-frame drop.
+    this.locked = false;
+
     this.previousTimestampMs = null;
     this.latestFrameMs = 0;
     this.lastAdjustmentReason = 'startup';
@@ -131,6 +136,10 @@ export class ThreeDQualityManager {
 
   clearUserTier() {
     this.userPinned = false;
+  }
+
+  setLocked(locked) {
+    this.locked = locked;
   }
 
   update(timestampMs = performance.now()) {
@@ -298,7 +307,7 @@ export class ThreeDQualityManager {
   }
 
   startMediumProbe() {
-    if (this.userPinned) return;
+    if (this.userPinned || this.locked) return;
 
     this.lastAdjustmentReason = 'low-to-medium-probe';
     this.mediumProbeActive = true;
@@ -343,6 +352,8 @@ export class ThreeDQualityManager {
   }
 
   downgrade(reason) {
+    if (this.locked) return;
+
     const tierIndex = this.tiers.indexOf(this.currentTier);
     if (tierIndex <= 0) {
       this.heavyFrameTimestamps.length = 0;
@@ -357,6 +368,11 @@ export class ThreeDQualityManager {
   }
 
   upgrade(reason) {
+    if (this.locked) {
+      this.upgradeStableElapsedMs = 0;
+      return;
+    }
+
     if (this.userPinned) {
       this.upgradeStableElapsedMs = 0;
       return;

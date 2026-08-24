@@ -12,7 +12,10 @@
 
 const TIERS = ['low', 'medium', 'high'];
 
-export function createPresetSwitcher({ onSelect }) {
+export function createPresetSwitcher({ onSelect, onLockChange }) {
+  const wrap = document.createElement('div');
+  wrap.id = 'preset-switcher-wrap';
+
   const select = document.createElement('select');
   select.id = 'preset-switcher';
   select.setAttribute('aria-label', 'Graphics preset');
@@ -25,7 +28,27 @@ export function createPresetSwitcher({ onSelect }) {
   }
 
   select.addEventListener('change', () => onSelect(select.value));
-  document.body.appendChild(select);
+
+  // A lock stops every automatic tier change — including the safety
+  // downgrade a plain selection still allows — so a chosen tier can be held
+  // in place for testing regardless of frame rate.
+  const lockLabel = document.createElement('label');
+  lockLabel.id = 'preset-switcher-lock';
+  lockLabel.title = 'Lock preset — block automatic upgrades and downgrades';
+
+  const lockCheckbox = document.createElement('input');
+  lockCheckbox.type = 'checkbox';
+  lockCheckbox.setAttribute('aria-label', 'Lock graphics preset');
+  lockCheckbox.addEventListener('change', () => {
+    onLockChange?.(lockCheckbox.checked);
+  });
+
+  lockLabel.appendChild(lockCheckbox);
+  lockLabel.appendChild(document.createTextNode('Lock'));
+
+  wrap.appendChild(select);
+  wrap.appendChild(lockLabel);
+  document.body.appendChild(wrap);
 
   function setTier(tier) {
     if (!TIERS.includes(tier) || select.value === tier) return;
@@ -33,7 +56,7 @@ export function createPresetSwitcher({ onSelect }) {
   }
 
   function dispose() {
-    select.remove();
+    wrap.remove();
   }
 
   return { setTier, dispose };
