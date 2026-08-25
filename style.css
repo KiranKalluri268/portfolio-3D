@@ -300,31 +300,33 @@ canvas {
 /* ── Stats panel ─────────────────────────────────────────── */
 /* Always visible, not only behind Ctrl+Alt+C. Fixed rather than absolute so it
    does not scroll away up the page. */
-/* The global `canvas` rule above is written for the renderer's canvas and pins
-   anything it matches to the top-left corner at 100% of the viewport. stats.js
-   only sets width and height inline on its own canvas, so position/top/left
-   were being taken from that rule and the meter rendered at 0,0 - outside its
-   container, ignoring the inset below, and under the notch on a phone. Putting
-   it back in normal flow lets the container do the positioning it always
-   claimed to. The size repeats what stats.js sets inline so the override cannot
-   collapse the panel if that inline style ever moves. */
-#stats-panel canvas {
-  position: static;
-  /* Block, or the canvas sits on the text baseline and the container comes out
-     52px tall around a 48px panel. Nothing reads that height today, but a 4px
-     phantom below the meter is exactly the sort of thing the next person
-     measures against. */
-  display: block;
-  width: 80px;
-  height: 48px;
+/* The meter is text, not a canvas: a small 2D canvas redrawn once a second
+   next to the WebGL canvas stalls the compositor for 76-723ms on an AMD iGPU
+   through ANGLE/D3D11, which trips the panic rule and costs tiers. See the
+   note in src/gui/statsGUI.js. */
+#stats-panel {
+  min-width: 80px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #d8f4ff;
+  font: 500 11px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
+#stats-panel .stats-fps {
+  font-size: 13px;
+  color: #7fe7ff;
+}
+
+
+/* The !important throughout here was aimed at stats.js, which wrote
+   position/top/left and a z-index of 10000 inline on its own container. Nothing
+   writes inline styles any more, so these are ordinary declarations again. */
 #stats-panel {
-  position: fixed !important;
-  top: max(8px, env(safe-area-inset-top)) !important;
-  left: max(8px, env(safe-area-inset-left)) !important;
-  /* stats.js writes position/top/left/z-index inline, including z-index 10000,
-     which would float the panel over the loading overlay. Every one of these
-     has to win against that, hence !important throughout. */
-  z-index: 17 !important;
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  z-index: 17;
 }
