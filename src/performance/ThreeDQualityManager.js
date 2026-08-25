@@ -3,8 +3,8 @@ export class ThreeDQualityManager {
     tiers = ['low', 'medium', 'high'],
     initialTier = 'medium',
     warmupMs = 5000,
-    healthyFrameMs = 18,
-    heavyFrameMs = 20,
+    healthyFrameMs = 22,
+    heavyFrameMs = 25,
     panicFrameMs = 50,
     maxFrameGapMs = 250,
     benchmarkDeadlineMs = 15000,
@@ -26,7 +26,11 @@ export class ThreeDQualityManager {
     this.tiers = tiers;
     this.currentTier = initialTier;
 
-    // Time budget thresholds. 16.67ms is ideal 60 FPS; >20ms is struggling.
+    // Time budget thresholds. 16.67ms is 60fps, 22ms is ~45fps, 25ms is 40fps,
+    // 50ms is 20fps. The heavy line sits at 40fps rather than the 50fps it used
+    // to, because this scene is a scroll-driven cinematic and the fall is meant
+    // to be expensive - a steady 45fps there is a good result, and scoring it as
+    // failure took a working tier away from the fastest phone it was tried on.
     this.healthyFrameMs = healthyFrameMs;
     this.heavyFrameMs = heavyFrameMs;
     this.panicFrameMs = panicFrameMs;
@@ -78,6 +82,9 @@ export class ThreeDQualityManager {
     this.mediumProbeActive = false;
     this.mediumProbeElapsedMs = 0;
     this.mediumProbeHeavyFrames = 0;
+    // Set once a probe has failed, and never cleared. One refusal settles the
+    // question for the session.
+    this.mediumProbeRejected = false;
 
     // A tier chosen by hand stops the manager climbing, but not dropping. The
     // safety net is protection and stays on; probing upward is ambition, and
@@ -306,8 +313,10 @@ export class ThreeDQualityManager {
     }
   }
 
+  // Returns whether the probe actually started. Callers that wait on
+  // onMediumProbeComplete have to know when it refused, or they wait forever.
   startMediumProbe() {
-    if (this.userPinned || this.locked) return;
+    if (this.userPinned || this.locked || this.mediumProbeRejected) return false;
 
     this.lastAdjustmentReason = 'low-to-medium-probe';
     this.mediumProbeActive = true;
@@ -317,6 +326,7 @@ export class ThreeDQualityManager {
     this.cooldownRemainingMs = 0;
     this.mediumProbeActive = true;
     this.onQualityUpgrade('medium', { reason: 'low-to-medium-probe' });
+    return true;
   }
 
   updateMediumProbe(frameMs) {
@@ -342,6 +352,13 @@ export class ThreeDQualityManager {
 
   failMediumProbe() {
     this.lastAdjustmentReason = 'medium-probe-failed';
+    // Asked and answered. The device has now rendered medium and could not hold
+    // it, and nothing about that will change while the page is open, so the
+    // cooldown is not a waiting period before trying again - there is nothing
+    // left to try. Without this the probe is a loop: climb, fail, wait out the
+    // cooldown, climb again, every half minute for as long as the visitor is
+    // scrolling, each pass a visible jump in quality and a visible collapse.
+    this.mediumProbeRejected = true;
     this.mediumProbeActive = false;
     this.mediumProbeElapsedMs = 0;
     this.mediumProbeHeavyFrames = 0;
