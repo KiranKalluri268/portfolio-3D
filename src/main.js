@@ -497,8 +497,19 @@ import Lenis from 'lenis';
     tiers: ['low', 'medium', 'high'],
     initialTier: 'medium',
     warmupMs: 3000,
-    healthyFrameMs: 18,
-    heavyFrameMs: 20,
+    // 22ms is ~45fps and 25ms is 40fps. These were 18 and 20, which put the bar
+    // at "near 60 or it is failing" and cost the tier that was actually working:
+    // an iPhone 16 Pro holds 40-60fps through the fall on high, every frame of
+    // which the old 20ms line scored as heavy. Six heavy frames inside 1.5s is a
+    // downgrade, and at 40fps that is essentially every frame, so high came off a
+    // device that was rendering it well.
+    //
+    // 40fps is the honest bar for this scene. It is a scroll-driven cinematic,
+    // not something being aimed at, and the fall is meant to be heavy. Panic
+    // stays at 50ms: that path is the one that behaved, dropping the same phone
+    // off high at 5-10fps exactly as it should.
+    healthyFrameMs: 22,
+    heavyFrameMs: 25,
     panicFrameMs: 50,
     maxFrameGapMs: 250,
     benchmarkDeadlineMs: 15000,

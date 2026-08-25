@@ -3,8 +3,8 @@ export class ThreeDQualityManager {
     tiers = ['low', 'medium', 'high'],
     initialTier = 'medium',
     warmupMs = 5000,
-    healthyFrameMs = 18,
-    heavyFrameMs = 20,
+    healthyFrameMs = 22,
+    heavyFrameMs = 25,
     panicFrameMs = 50,
     maxFrameGapMs = 250,
     benchmarkDeadlineMs = 15000,
@@ -26,7 +26,11 @@ export class ThreeDQualityManager {
     this.tiers = tiers;
     this.currentTier = initialTier;
 
-    // Time budget thresholds. 16.67ms is ideal 60 FPS; >20ms is struggling.
+    // Time budget thresholds. 16.67ms is 60fps, 22ms is ~45fps, 25ms is 40fps,
+    // 50ms is 20fps. The heavy line sits at 40fps rather than the 50fps it used
+    // to, because this scene is a scroll-driven cinematic and the fall is meant
+    // to be expensive - a steady 45fps there is a good result, and scoring it as
+    // failure took a working tier away from the fastest phone it was tried on.
     this.healthyFrameMs = healthyFrameMs;
     this.heavyFrameMs = heavyFrameMs;
     this.panicFrameMs = panicFrameMs;
