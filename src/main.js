@@ -550,10 +550,14 @@ import Lenis from 'lenis';
         // A benchmark that ran out of wall-clock never sampled a usable frame,
         // so its zeroed counters are not evidence of spare capacity. Settle at
         // the safe tier and let the visitor in rather than probing upward.
+        // Only hand off to the probe if it actually started. It refuses when the
+        // tier is pinned or locked, and now also once a probe has already failed
+        // this session - and this branch returns without settling, waiting on
+        // onMediumProbeComplete to finish loading. A refusal that was not
+        // noticed would leave the visitor at 96% on a screen that never opens.
         if (reason !== 'benchmark-deadline' && qualityManager.currentTier === 'low' && panicFrames === 0) {
           setLoadingStage('Testing Medium graphics...', 96)
-          qualityManager.startMediumProbe()
-          return
+          if (qualityManager.startMediumProbe()) return
         }
 
         initialQualityBenchmarkComplete = true;

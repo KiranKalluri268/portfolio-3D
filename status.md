@@ -284,6 +284,38 @@ had been sharing one set of numbers.
 at 0.85 of the approach and judges the device on the fall. See
 `BENCHMARK_POSE_UNITS` in `src/main.js`.
 
+**Moving the heavy line turned the medium probe into a loop, and that had to be
+fixed in the same breath.** `healthyFrameMs` is not only the downgrade bar — it
+also gates `trackUpgradeHeadroom`, which after 8s of unbroken healthy frames at
+low fires a medium probe, on a path the benchmark never touches. The Realme runs
+low at 50-75fps, or 13.3-20ms. Under the old 18ms bar every dip toward 50fps
+scored not-healthy and reset the timer, so the probe almost never accumulated
+its 8 seconds. Under 22ms every frame in that range qualifies and nothing resets
+it, so it reaches the probe every time — and medium at 15-20fps fails instantly.
+
+Simulated against the real class at that device's measured frame times, three
+minutes of falling:
+
+| | probes | failures |
+|---|---|---|
+| old 18/20 | 0 | 0 |
+| new 22/25, no fix | **6** | 6 |
+| new 22/25, with fix | 1 | 1 |
+
+Six climbs and six collapses in three minutes, one every thirty seconds, each a
+visible jump in quality and a visible drop. The fix is that a failed probe is
+now remembered for the session rather than retried after a cooldown: the device
+has rendered medium and could not hold it, and nothing about that changes while
+the page is open.
+
+A latent trap came out with it. `startMediumProbe()` silently refuses when the
+tier is pinned or locked, and `onWarmupComplete` in `main.js` called it and
+returned, waiting on `onMediumProbeComplete` to finish loading. A refusal that
+went unnoticed left the visitor at 96% on a screen that never opened. Unreachable
+before, because nothing could be pinned that early — but the session flag adds a
+third way to refuse, so the probe now reports whether it started and the caller
+settles when it did not.
+
 ### Parked: one tier cannot fit the whole journey
 
 75fps in the tunnel and 5-10fps in the fall, same tier and same device. The
