@@ -1,4 +1,4 @@
-// An always-visible preset dropdown, sitting next to the FPS meter.
+// An always-visible preset dropdown, sitting under the FPS meter.
 //
 // The lil-gui panel already has a preset control, but it is behind Ctrl+Alt+C,
 // which no phone can press. Tier behaviour is most worth watching on exactly the

@@ -234,15 +234,16 @@ canvas {
 
 /* ── Preset switcher ─────────────────────── */
 /* Always visible, including on touch, where the lil-gui panel cannot be
-   opened. Sits immediately right of the stats.js panel, which is 80px wide —
-   the offset is that width plus a gap, so the two never overlap. Under the
-   loading overlay (z-index 20) so the entry moment is not shared with a
-   control, and above the veil so a downgrade during the transition is still
-   readable. */
+   opened. Sits immediately under the stats.js panel, which is 80x48 — the
+   offset is that height plus a gap, so the two never overlap. Both are placed
+   against the same panel, so if stats.js ever changes its size this and
+   #stats-panel have to move together. Under the loading overlay (z-index 20)
+   so the entry moment is not shared with a control, and above the veil so a
+   downgrade during the transition is still readable. */
 #preset-switcher-wrap {
   position: fixed;
-  top: max(8px, env(safe-area-inset-top));
-  left: calc(max(8px, env(safe-area-inset-left)) + 88px);
+  top: calc(max(8px, env(safe-area-inset-top)) + 56px);
+  left: max(8px, env(safe-area-inset-left));
   z-index: 17;
   display: flex;
   align-items: center;
