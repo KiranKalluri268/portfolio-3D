@@ -253,6 +253,37 @@ import Lenis from 'lenis';
     approachEnd: 27.0,
   }
 
+  // Where the benchmark parks the camera while it judges this device.
+  //
+  // Scroll sits at zero during loading, and at zero the journey is the wormhole
+  // seen from 22 units out: a small bright shape on a mostly empty frame, and
+  // about the cheapest thing this scene ever draws. The expensive part is the
+  // fall — the raymarcher up close, the disk filling the frame, rays bent far
+  // enough round the photon sphere to spend most of their step budget. Judging
+  // a device on the opening and then sending it into the fall is measuring the
+  // wrong workload, and it comes out optimistic every time. Measured on a
+  // Realme 9 Speed Edition, high runs at 75fps inside the tunnel and 5-10fps in
+  // the fall: same tier, same device, a tenfold spread across one journey.
+  //
+  // 0.85 of the approach rather than the very last frame. The fall is nearly at
+  // its closest here, so it stands in for the worst the device will be asked
+  // for, while staying clear of the final frame's viewport-dependent framing.
+  // One global tier has to survive the most expensive moment, so that is the
+  // moment to measure.
+  const BENCHMARK_APPROACH_PROGRESS = 0.85
+  const BENCHMARK_POSE_UNITS =
+    JOURNEY.arrivalEnd + (JOURNEY.approachEnd - JOURNEY.arrivalEnd) * BENCHMARK_APPROACH_PROGRESS
+
+  // The pose is only ever held behind the loading overlay. The entry gate cannot
+  // arm until loading progress reaches 100, and only the benchmark's own
+  // completion takes it there, so there is no ordinary path where a visitor is
+  // looking at the scene while this is on. The dismissal check is a second lock
+  // on that, not the first: if it ever did overlap, the visitor would find the
+  // camera somewhere they did not scroll to.
+  function benchmarkPoseActive() {
+    return benchmarkStarted && !initialQualityBenchmarkComplete && !loadingOverlayDismissed
+  }
+
   function clamp01(value) {
     return Math.max(0, Math.min(1, value))
   }
@@ -579,7 +610,14 @@ import Lenis from 'lenis';
     updateLoadingProgress(delta)
 
     // scroll logic
-    const scrollViewportUnits = lenis.scroll / Math.max(1, window.innerHeight);
+    //
+    // While the benchmark runs, the journey is driven from a fixed pose in the
+    // fall instead of from scroll. This works because every value below is a
+    // pure function of this number, so there is nothing to restore afterwards —
+    // the frame after the benchmark ends reads scroll again and retraces itself.
+    const scrollViewportUnits = benchmarkPoseActive()
+      ? BENCHMARK_POSE_UNITS
+      : lenis.scroll / Math.max(1, window.innerHeight);
     storyOverlay.update(scrollViewportUnits)
     if (benchmarkStarted) qualityManager.update(frameTimestamp);
     if (frameTimestamp - lastDiagnosticsUpdate >= 250) {
