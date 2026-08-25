@@ -238,3 +238,79 @@ small, dark, up and to the left, just outside the glow of the near-side arc.
 Note that the film still's own black hole is smaller in frame than ours at the
 end of the fall, so its planet sits ~3 shadow radii out where ours is inside 1 —
 the still is a guide to the *look*, not a target for the numbers.
+
+---
+
+## The tiers, measured on real phones
+
+**State:** measured, and two of the three problems it turned up are fixed on this
+branch. The third is written down here and deliberately not built.
+
+Held each tier still with the preset lock and read the FPS counter. Two devices:
+
+| | Realme 9 Speed Edition | iPhone 16 Pro |
+|---|---|---|
+| low | 50-75 fps | — |
+| medium | 15-20 fps | — |
+| high | 5-10 fps | 40-60 fps, smooth |
+| high, inside the tunnel | 75 fps | — |
+
+### What that says
+
+**The Realme falls off a cliff, not a slope.** The presets are pure resolution
+ladders — `low/medium/high` differ in `resolution` and `maxPixelRatio` and in
+nothing else — so cost should track the square of the effective pixel ratio.
+At that device's DPR the rungs are 1.0, 1.25 and 1.5, predicting medium at
+~1.6x low and high at ~2.25x. Observed is a 3-5x collapse. Low is already
+sitting at that GPU's limit and everything above it goes off a bandwidth or
+occupancy edge rather than costing proportionally more.
+
+So for that phone the ladder is not three rungs. Low is the only rung it has,
+and medium at 15-20fps is not a fallback but a tier it cannot reach. That is
+worth remembering before any future work tries to tune medium for mobile: on
+this hardware there is nothing in between to tune.
+
+**The manager's heavy line was set at 50fps and that is what took high off the
+iPhone.** Any frame over 20ms scored heavy, six heavy frames inside 1.5s is a
+downgrade, and at 40-60fps essentially every frame breached it. The tier was
+working and the manager removed it. Moved to 25ms — 40fps — which is the honest
+bar for a scroll-driven cinematic where the fall is supposed to be expensive.
+Panic stayed at 50ms; that path behaved correctly throughout, dropping the
+Realme off high at 5-10fps exactly as it should. The lesson is that strictness
+was right on the protection path and wrong on the judgement path, and those two
+had been sharing one set of numbers.
+
+**The benchmark was measuring the opening.** Fixed here: it now parks the camera
+at 0.85 of the approach and judges the device on the fall. See
+`BENCHMARK_POSE_UNITS` in `src/main.js`.
+
+### Parked: one tier cannot fit the whole journey
+
+75fps in the tunnel and 5-10fps in the fall, same tier and same device. The
+journey's own cost varies by roughly tenfold between its acts, which means there
+is no single correct tier for it — one that survives the fall wastes the tunnel,
+and one that suits the tunnel dies in the fall. Benchmarking the most expensive
+moment, which is what this branch now does, buys correctness by giving up
+everything the cheap acts could have had.
+
+The fix would be a per-act budget, and there is a free place to change it: the
+wormhole-to-tunnel handover is already covered by a flash that burns to black,
+and a resolution change under that flash cannot be seen. The other seams are the
+arrival veil and the blackout.
+
+Not built, because it is a real feature rather than a tuning change and the two
+fixes above should be measured on their own before something structural lands on
+top of them. It is the next thing worth doing here.
+
+### Still to check
+
+The fixes above are reasoned from the numbers, not yet observed on either phone.
+What the fixed benchmark should now do:
+
+- **Realme** — starts at medium, the fall pose panics it within a frame or two,
+  settles on low before the entry gate arms. It should never see medium again.
+- **iPhone** — starts at medium, finds headroom at the fall pose, upgrades to
+  high, and *stays* there through the fall instead of walking down to low.
+
+If the Realme lands anywhere but low, or the iPhone still walks down, the
+numbers above are the place to start.
