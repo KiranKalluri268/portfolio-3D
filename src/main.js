@@ -541,10 +541,16 @@ import Lenis from 'lenis';
       }
       applyPerformancePreset(newTier, false);
     },
-    onWarmupComplete: ({ tier, heavyFrames, panicFrames, reason }) => {
+    onWarmupComplete: ({ tier, heavyFrames, panicFrames, p90, frames, reason }) => {
+      // p90 first, because that is what the verdict is made on. The heavy and
+      // panic counts are still printed, but only as context - they are the
+      // outliers the percentile is there to ignore, and reading them as the
+      // decision is what sent a 143fps laptop to the bottom rung.
       console.log(
         "Quality Manager: Warmup complete at " + tier +
-        " (" + heavyFrames + " heavy frames, " + panicFrames + " panic frames, " + reason + ")"
+        " (p90 " + (p90 === null ? "n/a" : p90.toFixed(1) + "ms") +
+        " over " + frames + " frames; " +
+        heavyFrames + " heavy, " + panicFrames + " panic; " + reason + ")"
       );
       setTimeout(() => {
         // A benchmark that ran out of wall-clock never sampled a usable frame,
@@ -634,7 +640,17 @@ import Lenis from 'lenis';
       ? BENCHMARK_POSE_UNITS
       : lenis.scroll / Math.max(1, window.innerHeight);
     storyOverlay.update(scrollViewportUnits)
-    if (benchmarkStarted) qualityManager.update(frameTimestamp);
+    if (benchmarkStarted) {
+      // Past the tunnel is the fall, where the raymarcher is close, the disk
+      // fills the frame and the cost is worth judging by. Everything before it —
+      // the wormhole from 22 units out, the passage — is cheap enough that a
+      // healthy frame there says nothing about whether a higher tier would
+      // survive what comes next. The manager uses this for upgrades only; it
+      // protects the frame rate everywhere.
+      qualityManager.update(frameTimestamp, {
+        representative: scrollViewportUnits > JOURNEY.tunnelEnd,
+      });
+    }
     if (frameTimestamp - lastDiagnosticsUpdate >= 250) {
       lastDiagnosticsUpdate = frameTimestamp
       updateDiagnostics(qualityManager.getDiagnostics())
