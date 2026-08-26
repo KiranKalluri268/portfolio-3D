@@ -265,12 +265,22 @@ import Lenis from 'lenis';
   // Realme 9 Speed Edition, high runs at 75fps inside the tunnel and 5-10fps in
   // the fall: same tier, same device, a tenfold spread across one journey.
   //
-  // 0.85 of the approach rather than the very last frame. The fall is nearly at
-  // its closest here, so it stands in for the worst the device will be asked
-  // for, while staying clear of the final frame's viewport-dependent framing.
-  // One global tier has to survive the most expensive moment, so that is the
-  // moment to measure.
-  const BENCHMARK_APPROACH_PROGRESS = 0.85
+  // 0.30 of the approach, which was 0.85 until the cost curve was actually
+  // swept. 0.85 was picked on the reasoning that the fall is at its most
+  // expensive when the black hole is closest, and that reasoning is backwards:
+  // up close the shadow terminates rays early, while at distance almost nothing
+  // terminates and nearly every ray spends its whole step budget on mildly-lensed
+  // background. Measured on a Realme 9 Speed Edition at `high`, the fall is a
+  // plateau of 145.8-152.8ms from 12 units out to about 21, then *falls away* to
+  // 138.8 and 111.1 as the disk fills the frame. 0.85 stands at the cheap end of
+  // the expensive act.
+  //
+  // The plateau is also why the sweep's own suggested constant came out as 0.36,
+  // 0.04, 0.25 and 0.57 on different runs - the argmax of a flat stretch is
+  // noise. Anything from roughly 0.05 to 0.55 measures the same thing; 0.30 is
+  // simply furthest from either edge. One global tier has to survive the most
+  // expensive stretch, so that is the stretch to stand in.
+  const BENCHMARK_APPROACH_PROGRESS = 0.30
   const BENCHMARK_POSE_UNITS =
     JOURNEY.arrivalEnd + (JOURNEY.approachEnd - JOURNEY.arrivalEnd) * BENCHMARK_APPROACH_PROGRESS
 
