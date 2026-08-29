@@ -174,6 +174,30 @@ import Lenis from 'lenis';
     bg_tint: { type: "v3", value: new THREE.Vector3(1.0, 1.0, 1.0) },
     space_color_plane: { type: "v3", value: new THREE.Vector3(0.01, 0.013, 0.03) },
     space_color_pole: { type: "v3", value: new THREE.Vector3(0.0, 0.0, 0.006) },
+    // The background sky, as gains rather than literals at the call site so each
+    // layer can be switched off on its own while the world is tuned. These are
+    // the values that used to be written into sample_sky's arguments.
+    bg_star_gain: { type: "f", value: 3.0 },
+    bg_nebula_gain: { type: "f", value: 0.2 },
+    // The skill web's domains as the galaxy's arms. The site drives these from
+    // src/data/skill-web.json, which is where the angles and accents below come
+    // from; they are copied here so the arms can be tuned by eye without the
+    // portfolio's data layer. Keep them in step, or tune here and re-read the
+    // numbers off the data rather than off this.
+    arm_color: { type: "v3v", value: [
+      new THREE.Vector3(1.000, 0.478, 0.094),   // #ff7a18
+      new THREE.Vector3(0.133, 0.827, 0.933),   // #22d3ee
+      new THREE.Vector3(0.204, 0.827, 0.600),   // #34d399
+      new THREE.Vector3(0.957, 0.447, 0.714),   // #f472b6
+      new THREE.Vector3(0.655, 0.545, 0.980),   // #a78bfa
+      new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0),
+    ] },
+    arm_angle: { type: "fv1", value: [
+      -90, -18, 54, 126, 198, 0, 0, 0,
+    ].map((deg) => deg * Math.PI / 180) },
+    arm_count: { type: "i", value: 5 },
+    arm_gain: { type: "f", value: 0.035 },
+    arm_pole: { type: "v3", value: new THREE.Vector3(0.22, 0.94, 0.26).normalize() },
     // The far side. Rotated well away from the background's own 45° so the star
     // pattern through the throat is visibly not the star pattern around it, and
     // landed on 40° because that patch of the nebula plate has the clumpy
