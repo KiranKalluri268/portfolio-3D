@@ -59,7 +59,7 @@ copied from the former non-commercial Milky Way asset:
 - `assets/milkyway-generated.jpg`
 - `assets/star_noise-generated.png`
 - `scripts/generate_milkyway.py`
-- `scripts/generate_star_noise.py`
+- `scripts/generate-star-noise.mjs`
 
 These files are distributed under GPL-3.0-or-later with the rest of this
 project.
