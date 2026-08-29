@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { CameraDragControls } from "../camera/CameraDragControls";
 import { Observer } from "../camera/Observer";
 import { Vector2 } from 'three/src/math/Vector2';
+import { applyComposeShiftProjection } from './composeShift';
 import fragmentShader from './fragmentShader.glsl?raw';
 import starUrl from '../../assets/star_noise-generated.png';
 import milkywayUrl from '../../assets/milkyway-preview.jpg';
@@ -173,7 +174,13 @@ export function createParticleSystem() {
     { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat }
   );
 
+  // The same off-centre frustum the raymarcher uses. Centred, this camera drew
+  // the sprites into a rectangle of sky that the shifted screen only partly
+  // overlaps, so the leftmost third of the frame sampled outside the target and
+  // got nothing — the one part of the scene with no parallax in it, in the part
+  // of the scene that most needed some.
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100000);
+  applyComposeShiftProjection(camera, camera.fov, camera.aspect);
 
   const sceneLensed = new THREE.Scene();
   const sceneUnlensed = new THREE.Scene();
@@ -245,7 +252,7 @@ export function createParticleSystem() {
     targetLensed.setSize(width, height);
     targetUnlensed.setSize(width, height);
     camera.aspect = width / height;
-    camera.updateProjectionMatrix();
+    applyComposeShiftProjection(camera, camera.fov, camera.aspect);
   }
 
   function dispose() {

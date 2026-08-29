@@ -8,6 +8,7 @@ import { ThreeDQualityManager } from './performance/ThreeDQualityManager';
 import { createStoryOverlay } from './story/StoryOverlay';
 import { createTunnel } from './graphics/tunnel';
 import { createPlanet } from './graphics/planet';
+import { applyComposeShiftProjection } from './graphics/composeShift';
 import Lenis from 'lenis';
 
 
@@ -1093,7 +1094,7 @@ import Lenis from 'lenis';
       particleCameraAspect = nextParticleAspect
       particleCamera.fov = particleCameraFov
       particleCamera.aspect = particleCameraAspect
-      particleCamera.updateProjectionMatrix()
+      applyComposeShiftProjection(particleCamera, particleCameraFov, particleCameraAspect)
     }
     particleCamera.position.copy(observer.position)
     particleCamera.up.copy(observer.up)
