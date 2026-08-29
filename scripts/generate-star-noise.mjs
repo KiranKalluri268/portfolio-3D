@@ -41,12 +41,25 @@ const OPTIONS = {
   width:      [4096,  'Texture width. Equirectangular, so it must be twice the height.'],
   height:     [2048,  'Texture height.'],
   seed:       [24680, 'Any change to this reshuffles the entire sky.'],
-  count:      [220000,'How many stars to place. Most land faint, so this is not how many you see.'],
+  count:      [90000, 'How many stars to place. Most land faint, so this is not how many you see.'],
 
   range:      [40,    'Brightness of the brightest star over the faintest, as a ratio.\n' +
                       '                 THE CONTRAST KNOB. 1 is the old texture (all stars alike);\n' +
                       '                 40 gives a carpet of faint ones under a scattering of bright;\n' +
                       '                 200 gives a few standouts over near-darkness.'],
+
+  patch:      [1.0,   'How much of the density comes from the large-scale field rather than\n' +
+                      '                 from an even spread, 0 to 1. THE ONE THAT MAKES IT LOOK REAL.\n' +
+                      '                 The band and the clusters below vary density too, but one over\n' +
+                      '                 the whole sphere and the other a couple of degrees at a time,\n' +
+                      '                 and a single frame sees neither: it sees a patch of sky tens of\n' +
+                      '                 degrees across, which is the scale this works at. 1.0 leaves no\n' +
+                      '                 even floor at all, which is what leaves parts of the sky empty\n' +
+                      '                 rather than merely thin.'],
+  patchScale: [35,    'Typical size of those patches, in degrees. Smaller is busier.'],
+  voids:      [0.35,  'Fraction of the sky area the field is cut off below, 0 to 1. Only\n' +
+                      '                 empties that sky when --patch is 1.0. Measured\n' +
+                      '                 off the field rather than assumed, and reported back.'],
 
   band:       [0.8,   'How much the stars crowd into the galactic plane, 0 to 1.\n' +
                       '                 0 is a uniform sphere, which is what shipped. 0.8 puts roughly\n' +
@@ -56,10 +69,16 @@ const OPTIONS = {
   bandWidth:  [0.20,  'Half-width of that plane, in units where 1.0 is pole to equator.\n' +
                       '                 0.20 is about 18 degrees.'],
 
-  clump:      [0.35,  'Fraction of stars belonging to a cluster rather than scattered, 0 to 1.\n' +
+  clump:      [0.22,  'Fraction of stars belonging to a cluster rather than scattered, 0 to 1.\n' +
                       '                 This is what stops the field looking machine-generated.'],
-  clumps:     [140,   'How many clusters those stars are shared between.'],
-  clumpSpread:[2.6,   'Angular radius of a cluster, in degrees.'],
+  clumps:     [70,    'How many clusters those stars are shared between.'],
+  clumpSpread:[3.5,   'Angular radius of a cluster, in degrees.'],
+
+  big:        [0.012, 'Fraction of stars drawn wider than a single texel, 0 to 1.\n' +
+                      '                 Taken as a fraction rather than as a brightness cutoff so that\n' +
+                      '                 changing --range alters the contrast without quietly altering\n' +
+                      '                 how many fat stars there are. Each further size step is a fifth\n' +
+                      '                 as common as the one before.'],
 
   gamma:      [1.0,   'Applied to brightness after the distribution. Below 1 lifts the faint\n' +
                       '                 end without touching the bright end; above 1 crushes it.'],
@@ -148,6 +167,65 @@ function bandProfile(x, y, bandWidth) {
   return Math.exp(-((latitude / (bandWidth * middleWidth)) ** 2));
 }
 
+// ── The large-scale density field ───────────────────────────────────────────
+// What makes a real sky look unplanned is not that stars are placed at random —
+// random is exactly what looks even. It is that the density itself varies, in
+// patches tens of degrees across, with genuinely empty stretches between them.
+//
+// The galactic band varies density too, and so do the clusters, but neither at
+// this scale: the band is one gradient over the whole sphere and a cluster is a
+// few degrees. A single frame sees a patch of sky in between, and across that
+// patch both of them are near enough constant. So the field looked even, which
+// is what it was.
+//
+// Built from a sum of random plane waves over the direction vector rather than
+// from grid noise. Two reasons: it is defined on the sphere itself, so there is
+// no seam at the wrap and no pinch at the poles, and a sum of cosines is
+// near-normally distributed, which gives the quantile below something well
+// behaved to cut against.
+function makeDensityField(rng, scaleDegrees, waves = 14) {
+  const base = 180 / Math.max(2, scaleDegrees);
+  const terms = [];
+  for (let i = 0; i < waves; i++) {
+    const z = rng() * 2 - 1;
+    const phi = rng() * 2 * Math.PI;
+    const r = Math.sqrt(Math.max(0, 1 - z * z));
+    terms.push({
+      nx: r * Math.cos(phi), ny: z, nz: r * Math.sin(phi),
+      freq: base * (0.6 + 0.8 * rng()),
+      phase: rng() * 2 * Math.PI,
+    });
+  }
+  const norm = Math.sqrt(waves / 2);
+  return (x, y, z) => {
+    let sum = 0;
+    for (const t of terms) sum += Math.cos(t.freq * (t.nx * x + t.ny * y + t.nz * z) + t.phase);
+    return sum / norm;
+  };
+}
+
+/** Unit vector for a longitude and a latitude normalised to +-1 at the poles. */
+function toDirection(lon, y) {
+  const lat = (y * Math.PI) / 2;
+  const c = Math.cos(lat);
+  return [c * Math.cos(lon), Math.sin(lat), c * Math.sin(lon)];
+}
+
+// Where to cut the field so that about `fraction` of the sky falls below it.
+// Sampled rather than derived, because the answer depends on the wave mix this
+// seed happened to draw, and a void fraction that is only approximately what was
+// asked for is worse than one that is measured and reported.
+function findVoidLevel(field, rng, fraction, samples = 20000) {
+  if (fraction <= 0) return -Infinity;
+  const values = new Float64Array(samples);
+  for (let i = 0; i < samples; i++) {
+    const [x, y, z] = toDirection(rng() * 2 * Math.PI, (Math.asin(rng() * 2 - 1) / Math.PI) * 2);
+    values[i] = field(x, y, z);
+  }
+  values.sort();
+  return values[Math.min(samples - 1, Math.floor(fraction * samples))];
+}
+
 // ── Brightness ──────────────────────────────────────────────────────────────
 // Euclidean number counts: in a uniformly filled volume the number of sources
 // brighter than flux f goes as f^-1.5, because you see further for brighter
@@ -166,11 +244,22 @@ function makeBrightnessSampler(range) {
 // Bright stars get a wider point spread than faint ones, which is the second
 // half of looking like a sky: a star's apparent size is its brightness, both
 // here and again in the bloom pass afterwards.
-function radiusFor(brightness) {
-  if (brightness > 0.80) return 3;
-  if (brightness > 0.55) return 2;
-  if (brightness > 0.22) return 1;
-  return 0;
+//
+// The cutoffs are quantiles of the brightness distribution rather than fixed
+// brightnesses, so --big means the same thing whatever --range is set to.
+// Hardcoding them meant raising the contrast silently fattened the sky, because
+// a wider range pushes more stars past a fixed line.
+function makeRadiusFor(sampleBrightness, big) {
+  const quantile = (p) => sampleBrightness(() => p);
+  const one = quantile(Math.min(1, big));
+  const two = quantile(Math.min(1, big / 5));
+  const three = quantile(Math.min(1, big / 25));
+  return (brightness) => {
+    if (brightness >= three) return 3;
+    if (brightness >= two) return 2;
+    if (brightness >= one) return 1;
+    return 0;
+  };
 }
 
 function main() {
@@ -178,6 +267,13 @@ function main() {
   const { width, height } = opts;
   const rng = makeRng(opts.seed);
   const sampleBrightness = makeBrightnessSampler(opts.range);
+  const radiusFor = makeRadiusFor(sampleBrightness, opts.big);
+  const density = makeDensityField(rng, opts.patchScale);
+  const voidLevel = findVoidLevel(density, makeRng(opts.seed ^ 0x5bf03635), opts.voids);
+  // The field is roughly a unit normal, so the top of its useful range sits a
+  // couple of standard deviations up. Everything above saturates rather than
+  // running away into a handful of absurdly dense spots.
+  const densityTop = voidLevel + 2.0;
 
   const bright = new Float32Array(width * height);
   const temp = new Uint8Array(width * height);
@@ -211,8 +307,18 @@ function main() {
     for (;;) {
       const lon = rng() * 2 * Math.PI;
       const y = (Math.asin(rng() * 2 - 1) / Math.PI) * 2;   // -1..1, linear in latitude
-      const weight = (1 - opts.band) + opts.band * bandProfile(lon, y, opts.bandWidth);
-      if (rng() <= weight) return { lon, y };
+
+      // The galactic plane: one gradient over the whole sphere.
+      const band = (1 - opts.band) + opts.band * bandProfile(lon, y, opts.bandWidth);
+
+      // The patches: the part a single frame can actually see. Below voidLevel
+      // the ramp is zero, so those stretches of sky get nothing at all rather
+      // than getting fewer.
+      const [dx, dy, dz] = toDirection(lon, y);
+      const ramp = Math.min(1, Math.max(0, (density(dx, dy, dz) - voidLevel) / (densityTop - voidLevel)));
+      const patch = (1 - opts.patch) + opts.patch * ramp;
+
+      if (rng() <= band * patch) return { lon, y };
     }
   }
 
@@ -223,17 +329,29 @@ function main() {
 
   const clumpCount = Math.max(0, Math.round(opts.count * opts.clump));
   const scatterCount = opts.count - clumpCount;
+  // Drawn through the same weighting as everything else, so clusters land where
+  // the sky is already dense rather than sitting in the middle of a void.
   const centres = [];
   for (let i = 0; i < opts.clumps; i++) centres.push(sampleDirection());
   const spreadY = opts.clumpSpread / 90;   // degrees into the +-1 latitude scale
 
+  const CELLS_LON = 24, CELLS_LAT = 12;   // equal solid angle: uniform in sin(lat)
+  const cells = new Int32Array(CELLS_LON * CELLS_LAT);
+  const sizes = [0, 0, 0, 0];
+
   function emit(lon, y) {
+    const cl = Math.min(CELLS_LON - 1, Math.floor((lon / (2 * Math.PI)) * CELLS_LON));
+    const ca = Math.min(CELLS_LAT - 1, Math.floor(((Math.sin((y * Math.PI) / 2) + 1) / 2) * CELLS_LAT));
+    cells[ca * CELLS_LON + cl]++;
+
     const { x: tx, y: ty } = toTexel(lon, y);
     let brightness = sampleBrightness(rng);
     if (opts.gamma !== 1) brightness = Math.pow(brightness, opts.gamma);
     const temperature = Math.min(1, Math.max(0, betaSample(rng, 2.2, 2.6)));
     const velocity = Math.min(0.82, Math.max(0.18, 0.5 + gaussian(rng) * 0.075));
-    addStar(tx, ty, temperature, brightness, velocity, radiusFor(brightness));
+    const radius = radiusFor(brightness);
+    sizes[radius]++;
+    addStar(tx, ty, temperature, brightness, velocity, radius);
   }
 
   for (let i = 0; i < scatterCount; i++) {
@@ -251,7 +369,7 @@ function main() {
   }
 
   writePng(opts.output, width, height, bright, temp, vel);
-  report(opts, bright);
+  report(opts, bright, cells, sizes);
 }
 
 function gaussian(rng) {
@@ -319,7 +437,7 @@ function writePng(path, width, height, bright, temp, vel) {
 // ── What came out ───────────────────────────────────────────────────────────
 // Printed rather than assumed. The old texture's problems were all visible in
 // numbers like these, and nobody was looking at them.
-function report(opts, bright) {
+function report(opts, bright, cells, sizes) {
   const lit = [];
   for (let i = 0; i < bright.length; i++) if (bright[i] > 0) lit.push(bright[i]);
   lit.sort((a, b) => a - b);
@@ -332,7 +450,20 @@ function report(opts, bright) {
               `p90 ${(at(0.9) * 255).toFixed(0)}   p99 ${(at(0.99) * 255).toFixed(0)}   ` +
               `max ${(at(1) * 255).toFixed(0)}`);
   console.log(`  above 0.25        ${visible} texels (${(100 * visible / lit.length).toFixed(1)}% of lit) — the ones you actually see`);
-  console.log(`  band ${opts.band}  range ${opts.range}  clump ${opts.clump}  seed ${opts.seed}`);
+
+  // Whether the density varies is the whole question, so it gets measured.
+  const sorted = Array.from(cells).sort((a, b) => a - b);
+  const cellAt = (q) => sorted[Math.floor(q * (sorted.length - 1))];
+  const empty = sorted.filter((n) => n === 0).length;
+  const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
+  console.log(`  density           p10 ${cellAt(0.1)}  p50 ${cellAt(0.5)}  p90 ${cellAt(0.9)} ` +
+              `stars per equal-area cell (mean ${mean.toFixed(0)})`);
+  console.log(`  empty sky         ${(100 * empty / sorted.length).toFixed(0)}% of 15-degree cells hold nothing at all` +
+              `, from ${(100 * opts.voids).toFixed(0)}% of sky area cut off`);
+  console.log(`  star sizes        ${sizes[0]} single texel, ${sizes[1]} small, ${sizes[2]} medium, ${sizes[3]} large ` +
+              `(${(100 * (sizes[1] + sizes[2] + sizes[3]) / opts.count).toFixed(2)}% wider than one texel)`);
+  console.log(`  count ${opts.count}  range ${opts.range}  patch ${opts.patch}/${opts.patchScale}deg  ` +
+              `voids ${opts.voids}  band ${opts.band}  clump ${opts.clump}  big ${opts.big}  seed ${opts.seed}`);
 }
 
 main();
