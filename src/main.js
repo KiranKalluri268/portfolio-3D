@@ -10,6 +10,7 @@ import { createTunnel } from './graphics/tunnel';
 import { createPlanet } from './graphics/planet';
 import { applyComposeShiftProjection } from './graphics/composeShift';
 import Lenis from 'lenis';
+import { resolveSkyLayers, resolveStarGain } from './skyLayers';
 
 
 (async () => {
@@ -135,6 +136,17 @@ import Lenis from 'lenis';
     },
   };
 
+  // Which layers of the sky are drawn, and how hard the star plate burns. Both
+  // read once, from the URL, so a page load is the whole mechanism: ?sky=nodust,
+  // ?sky=noglow,nonebula, ?starGain=0. See src/skyLayers.js.
+  const skyLayers = resolveSkyLayers(window.location.search);
+  const SKY_STAR_GAIN = resolveStarGain(window.location.search, 3.0);
+  console.log(
+    'Sky layers: ' +
+      Object.entries(skyLayers).map(([name, on]) => (on ? name : `no-${name}`)).join(', ') +
+      ` | starGain ${SKY_STAR_GAIN}`,
+  );
+
   // Initial loading and frame-time benchmark state.
   let texturesLoaded = false;
   let initialQualityBenchmarkComplete = false;
@@ -177,8 +189,8 @@ import Lenis from 'lenis';
     // The background sky, as gains rather than literals at the call site so each
     // layer can be switched off on its own while the world is tuned. These are
     // the values that used to be written into sample_sky's arguments.
-    bg_star_gain: { type: "f", value: 3.0 },
-    bg_nebula_gain: { type: "f", value: 0.2 },
+    bg_star_gain: { type: "f", value: skyLayers.stars ? SKY_STAR_GAIN : 0.0 },
+    bg_nebula_gain: { type: "f", value: skyLayers.nebula ? 0.2 : 0.0 },
     // The skill web's domains as the galaxy's arms. The site drives these from
     // src/data/skill-web.json, which is where the angles and accents below come
     // from; they are copied here so the arms can be tuned by eye without the
@@ -357,7 +369,7 @@ import Lenis from 'lenis';
     particleCamera,
     resizeParticleTargets,
     disposeParticleSystem
-  } = createParticleSystem();
+  } = createParticleSystem(skyLayers);
   uniforms.particle_texture.value = particleTargetLensed.texture;
   uniforms.particle_texture_unlensed.value = particleTargetUnlensed.texture;
 
@@ -1027,6 +1039,14 @@ import Lenis from 'lenis';
       BLACK_HOLE.spaceColorPole, WORMHOLE.spaceColorPole, mix)
     uniforms.bg_lensing.value =
       BLACK_HOLE.bgLensing + (WORMHOLE.bgLensing - BLACK_HOLE.bgLensing) * mix
+
+    // The plane-to-pole gradient, off. Applied after the lerps above, which
+    // write both colours every frame, so switching it anywhere else would be
+    // overwritten immediately.
+    if (!skyLayers.glow) {
+      uniforms.space_color_plane.value.set(0, 0, 0)
+      uniforms.space_color_pole.value.set(0, 0, 0)
+    }
   }
 
   let veilColor = ''

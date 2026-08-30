@@ -164,7 +164,12 @@ export async function createShaderProjectionPlane(uniforms) {
   };
 }
 
-export function createParticleSystem() {
+/**
+ * @param {Readonly<{ dust: boolean }>} [skyLayers] - `?sky=nodust` empties the
+ *   shell without removing the plumbing, so the field can be ruled in or out by
+ *   eye. Defaults to on, so a caller that does not care keeps the old behaviour.
+ */
+export function createParticleSystem(skyLayers = { dust: true }) {
   const targetLensed = new THREE.WebGLRenderTarget(
     window.innerWidth, window.innerHeight,
     { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat }
@@ -213,7 +218,7 @@ export function createParticleSystem() {
   };
 
   // Layer 1: many small crisp stars (bulk of the field)
-  const COUNT_S = 2200;
+  const COUNT_S = skyLayers.dust ? 2200 : 0;
   const posS = new Float32Array(COUNT_S * 3);
   for (let i = 0; i < COUNT_S; i++) {
     const theta = Math.random() * Math.PI * 2;
@@ -229,7 +234,7 @@ export function createParticleSystem() {
   sceneLensed.add(new THREE.Points(geoS, materialS));
 
   // Layer 2: fewer brighter slightly-larger stars (foreground highlights)
-  const COUNT_B = 300;
+  const COUNT_B = skyLayers.dust ? 300 : 0;
   const posB = new Float32Array(COUNT_B * 3);
   for (let i = 0; i < COUNT_B; i++) {
     const theta = Math.random() * Math.PI * 2;
