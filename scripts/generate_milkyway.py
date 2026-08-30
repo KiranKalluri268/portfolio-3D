@@ -2,6 +2,16 @@
 
 The output is horizontally seamless and intended for spherical environment
 mapping. It does not use or transform any third-party source image.
+
+The plate that ships is this script's output with half its stars taken back
+out by scripts/thin-nebula-stars.mjs. Regenerating from here reintroduces all
+105,000 of them, and they are drawn through NearestFilter as hard single-texel
+dots that no shader uniform can turn down — so run the thinning pass after,
+or the sky gets its second star field back.
+
+scripts/generate-milkyway.mjs is this file ported to Node, for machines with no
+Python. It omits the stars entirely rather than thinning them, so it draws a
+different nebula and cannot reproduce this one.
 """
 
 from __future__ import annotations
