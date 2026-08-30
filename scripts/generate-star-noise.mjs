@@ -77,8 +77,22 @@ const OPTIONS = {
   big:        [0.012, 'Fraction of stars drawn wider than a single texel, 0 to 1.\n' +
                       '                 Taken as a fraction rather than as a brightness cutoff so that\n' +
                       '                 changing --range alters the contrast without quietly altering\n' +
-                      '                 how many fat stars there are. Each further size step is a fifth\n' +
-                      '                 as common as the one before.'],
+                      '                 how many fat stars there are. Sets the r1 rung; the two above it\n' +
+                      '                 are counted rather than divided down — see --mid and --top.'],
+
+  mid:        [100,   'How many stars are drawn at the middle width (r1.5), as a COUNT and\n' +
+                      '                 not a fraction. These used to be a fifth of --big and the top a\n' +
+                      '                 twenty-fifth, which meant the only way to have fewer wide stars\n' +
+                      '                 was to have fewer of every width at once.'],
+  top:        [10,    'How many stars are drawn at the widest width (--maxRadius), as a\n' +
+                      '                 count. The handful that read as the brightest things in the sky.'],
+
+  maxRadius:  [2,     'Radius of the widest star, in texels. THE SIZE CEILING, separate\n' +
+                      '                 from how many are wide at all: --big says how many stars step up\n' +
+                      '                 a size, this says where the ladder stops. Stars that would have\n' +
+                      '                 gone higher are drawn at this radius instead, so lowering it\n' +
+                      '                 flattens the top of the size distribution rather than thinning\n' +
+                      '                 it. 3 was the original ceiling.'],
 
   gamma:      [1.0,   'Applied to brightness after the distribution. Below 1 lifts the faint\n' +
                       '                 end without touching the bright end; above 1 crushes it.'],
@@ -249,15 +263,26 @@ function makeBrightnessSampler(range) {
 // brightnesses, so --big means the same thing whatever --range is set to.
 // Hardcoding them meant raising the contrast silently fattened the sky, because
 // a wider range pushes more stars past a fixed line.
-function makeRadiusFor(sampleBrightness, big) {
+function makeRadiusFor(sampleBrightness, big, maxRadius, mid, top, count) {
   const quantile = (p) => sampleBrightness(() => p);
   const one = quantile(Math.min(1, big));
-  const two = quantile(Math.min(1, big / 5));
-  const three = quantile(Math.min(1, big / 25));
+  // Cumulative thresholds, so the wider rung has to be added in: a star bright
+  // enough for the top is also above the middle cutoff, and without this --mid
+  // would quietly mean "mid minus top" and come up short by however many wide
+  // ones there are.
+  const two = quantile(Math.min(1, (mid + top) / count));
+  const three = quantile(Math.min(1, top / count));
+  // Clamped rather than re-laddered: a star bright enough for radius 3 still
+  // gets the widest size there is, it is just narrower than it used to be.
+  //
+  // The middle rung is 1.5 rather than 2 — the step from 1 to 2 was the one
+  // that read as a jump in size rather than as a spread, and 1.5 sits between
+  // them. addStar takes fractional radii, so this is a real width and not a
+  // rounded one.
   return (brightness) => {
-    if (brightness >= three) return 3;
-    if (brightness >= two) return 2;
-    if (brightness >= one) return 1;
+    if (brightness >= three) return Math.min(3, maxRadius);
+    if (brightness >= two) return Math.min(1.5, maxRadius);
+    if (brightness >= one) return Math.min(1, maxRadius);
     return 0;
   };
 }
@@ -267,7 +292,7 @@ function main() {
   const { width, height } = opts;
   const rng = makeRng(opts.seed);
   const sampleBrightness = makeBrightnessSampler(opts.range);
-  const radiusFor = makeRadiusFor(sampleBrightness, opts.big);
+  const radiusFor = makeRadiusFor(sampleBrightness, opts.big, opts.maxRadius, opts.mid, opts.top, opts.count);
   const density = makeDensityField(rng, opts.patchScale);
   const voidLevel = findVoidLevel(density, makeRng(opts.seed ^ 0x5bf03635), opts.voids);
   // The field is roughly a unit normal, so the top of its useful range sits a
@@ -282,12 +307,18 @@ function main() {
   // Place one star, keeping the brighter of any overlap so a faint neighbour
   // cannot eat a bright core.
   function addStar(x, y, temperature, brightness, velocity, radius) {
+    // Radius is allowed to be fractional. The footprint has to land on whole
+    // texels, so it rounds up, but the width of the star inside that footprint
+    // does not: a radius of 1.5 reaches as far as 2 and is drawn as narrowly as
+    // its own sigma says, which is a size between the two steps rather than a
+    // clipped version of the larger one.
     const sigma = Math.max(0.42, radius * 0.48);
     const twoSigmaSq = 2 * sigma * sigma;
-    for (let dy = -radius; dy <= radius; dy++) {
+    const reach = Math.ceil(radius);
+    for (let dy = -reach; dy <= reach; dy++) {
       const py = y + dy;
       if (py < 0 || py >= height) continue;          // poles do not wrap onto themselves
-      for (let dx = -radius; dx <= radius; dx++) {
+      for (let dx = -reach; dx <= reach; dx++) {
         const px = (x + dx + width) % width;         // longitude does
         const emitted = brightness * Math.exp(-(dx * dx + dy * dy) / twoSigmaSq);
         const i = py * width + px;
@@ -337,7 +368,8 @@ function main() {
 
   const CELLS_LON = 24, CELLS_LAT = 12;   // equal solid angle: uniform in sin(lat)
   const cells = new Int32Array(CELLS_LON * CELLS_LAT);
-  const sizes = [0, 0, 0, 0];
+  // Keyed by the radius actually drawn, which may be fractional.
+  const sizes = new Map();
 
   function emit(lon, y) {
     const cl = Math.min(CELLS_LON - 1, Math.floor((lon / (2 * Math.PI)) * CELLS_LON));
@@ -350,7 +382,7 @@ function main() {
     const temperature = Math.min(1, Math.max(0, betaSample(rng, 2.2, 2.6)));
     const velocity = Math.min(0.82, Math.max(0.18, 0.5 + gaussian(rng) * 0.075));
     const radius = radiusFor(brightness);
-    sizes[radius]++;
+    sizes.set(radius, (sizes.get(radius) ?? 0) + 1);
     addStar(tx, ty, temperature, brightness, velocity, radius);
   }
 
@@ -460,10 +492,13 @@ function report(opts, bright, cells, sizes) {
               `stars per equal-area cell (mean ${mean.toFixed(0)})`);
   console.log(`  empty sky         ${(100 * empty / sorted.length).toFixed(0)}% of 15-degree cells hold nothing at all` +
               `, from ${(100 * opts.voids).toFixed(0)}% of sky area cut off`);
-  console.log(`  star sizes        ${sizes[0]} single texel, ${sizes[1]} small, ${sizes[2]} medium, ${sizes[3]} large ` +
-              `(${(100 * (sizes[1] + sizes[2] + sizes[3]) / opts.count).toFixed(2)}% wider than one texel)`);
+  const bySize = [...sizes.entries()].sort((p, q) => p[0] - q[0]);
+  const wider = bySize.filter(([r]) => r > 0).reduce((n, [, c]) => n + c, 0);
+  console.log(`  star sizes        ` +
+              bySize.map(([r, c]) => `r${r} x${c}`).join("  ") +
+              `  (${(100 * wider / opts.count).toFixed(2)}% wider than one texel)`);
   console.log(`  count ${opts.count}  range ${opts.range}  patch ${opts.patch}/${opts.patchScale}deg  ` +
-              `voids ${opts.voids}  band ${opts.band}  clump ${opts.clump}  big ${opts.big}  seed ${opts.seed}`);
+              `voids ${opts.voids}  band ${opts.band}  clump ${opts.clump}  big ${opts.big}  mid ${opts.mid}  top ${opts.top}  maxRadius ${opts.maxRadius}  seed ${opts.seed}`);
 }
 
 main();
