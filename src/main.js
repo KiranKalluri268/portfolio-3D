@@ -8,7 +8,9 @@ import { ThreeDQualityManager } from './performance/ThreeDQualityManager';
 import { createStoryOverlay } from './story/StoryOverlay';
 import { createTunnel } from './graphics/tunnel';
 import { createPlanet } from './graphics/planet';
+import { applyComposeShiftProjection } from './graphics/composeShift';
 import Lenis from 'lenis';
+import { resolveSkyLayers, resolveStarGain } from './skyLayers';
 
 
 (async () => {
@@ -134,6 +136,17 @@ import Lenis from 'lenis';
     },
   };
 
+  // Which layers of the sky are drawn, and how hard the star plate burns. Both
+  // read once, from the URL, so a page load is the whole mechanism: ?sky=nodust,
+  // ?sky=noglow,nonebula, ?starGain=0. See src/skyLayers.js.
+  const skyLayers = resolveSkyLayers(window.location.search);
+  const SKY_STAR_GAIN = resolveStarGain(window.location.search, 3.0);
+  console.log(
+    'Sky layers: ' +
+      Object.entries(skyLayers).map(([name, on]) => (on ? name : `no-${name}`)).join(', ') +
+      ` | starGain ${SKY_STAR_GAIN}`,
+  );
+
   // Initial loading and frame-time benchmark state.
   let texturesLoaded = false;
   let initialQualityBenchmarkComplete = false;
@@ -173,6 +186,30 @@ import Lenis from 'lenis';
     bg_tint: { type: "v3", value: new THREE.Vector3(1.0, 1.0, 1.0) },
     space_color_plane: { type: "v3", value: new THREE.Vector3(0.01, 0.013, 0.03) },
     space_color_pole: { type: "v3", value: new THREE.Vector3(0.0, 0.0, 0.006) },
+    // The background sky, as gains rather than literals at the call site so each
+    // layer can be switched off on its own while the world is tuned. These are
+    // the values that used to be written into sample_sky's arguments.
+    bg_star_gain: { type: "f", value: skyLayers.stars ? SKY_STAR_GAIN : 0.0 },
+    bg_nebula_gain: { type: "f", value: skyLayers.nebula ? 0.2 : 0.0 },
+    // The skill web's domains as the galaxy's arms. The site drives these from
+    // src/data/skill-web.json, which is where the angles and accents below come
+    // from; they are copied here so the arms can be tuned by eye without the
+    // portfolio's data layer. Keep them in step, or tune here and re-read the
+    // numbers off the data rather than off this.
+    arm_color: { type: "v3v", value: [
+      new THREE.Vector3(1.000, 0.478, 0.094),   // #ff7a18
+      new THREE.Vector3(0.133, 0.827, 0.933),   // #22d3ee
+      new THREE.Vector3(0.204, 0.827, 0.600),   // #34d399
+      new THREE.Vector3(0.957, 0.447, 0.714),   // #f472b6
+      new THREE.Vector3(0.655, 0.545, 0.980),   // #a78bfa
+      new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0),
+    ] },
+    arm_angle: { type: "fv1", value: [
+      -90, -18, 54, 126, 198, 0, 0, 0,
+    ].map((deg) => deg * Math.PI / 180) },
+    arm_count: { type: "i", value: 5 },
+    arm_gain: { type: "f", value: 0.035 },
+    arm_pole: { type: "v3", value: new THREE.Vector3(0.22, 0.94, 0.26).normalize() },
     // The far side. Rotated well away from the background's own 45° so the star
     // pattern through the throat is visibly not the star pattern around it, and
     // landed on 40° because that patch of the nebula plate has the clumpy
@@ -332,7 +369,7 @@ import Lenis from 'lenis';
     particleCamera,
     resizeParticleTargets,
     disposeParticleSystem
-  } = createParticleSystem();
+  } = createParticleSystem(skyLayers);
   uniforms.particle_texture.value = particleTargetLensed.texture;
   uniforms.particle_texture_unlensed.value = particleTargetUnlensed.texture;
 
@@ -1002,6 +1039,14 @@ import Lenis from 'lenis';
       BLACK_HOLE.spaceColorPole, WORMHOLE.spaceColorPole, mix)
     uniforms.bg_lensing.value =
       BLACK_HOLE.bgLensing + (WORMHOLE.bgLensing - BLACK_HOLE.bgLensing) * mix
+
+    // The plane-to-pole gradient, off. Applied after the lerps above, which
+    // write both colours every frame, so switching it anywhere else would be
+    // overwritten immediately.
+    if (!skyLayers.glow) {
+      uniforms.space_color_plane.value.set(0, 0, 0)
+      uniforms.space_color_pole.value.set(0, 0, 0)
+    }
   }
 
   let veilColor = ''
@@ -1093,7 +1138,7 @@ import Lenis from 'lenis';
       particleCameraAspect = nextParticleAspect
       particleCamera.fov = particleCameraFov
       particleCamera.aspect = particleCameraAspect
-      particleCamera.updateProjectionMatrix()
+      applyComposeShiftProjection(particleCamera, particleCameraFov, particleCameraAspect)
     }
     particleCamera.position.copy(observer.position)
     particleCamera.up.copy(observer.up)

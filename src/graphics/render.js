@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { CameraDragControls } from "../camera/CameraDragControls";
 import { Observer } from "../camera/Observer";
 import { Vector2 } from 'three/src/math/Vector2';
+import { applyComposeShiftProjection } from './composeShift';
 import fragmentShader from './fragmentShader.glsl?raw';
 import starUrl from '../../assets/star_noise-generated.png';
 import milkywayUrl from '../../assets/milkyway-preview.jpg';
@@ -163,7 +164,12 @@ export async function createShaderProjectionPlane(uniforms) {
   };
 }
 
-export function createParticleSystem() {
+/**
+ * @param {Readonly<{ dust: boolean }>} [skyLayers] - `?sky=nodust` empties the
+ *   shell without removing the plumbing, so the field can be ruled in or out by
+ *   eye. Defaults to on, so a caller that does not care keeps the old behaviour.
+ */
+export function createParticleSystem(skyLayers = { dust: true }) {
   const targetLensed = new THREE.WebGLRenderTarget(
     window.innerWidth, window.innerHeight,
     { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat }
@@ -173,7 +179,13 @@ export function createParticleSystem() {
     { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat }
   );
 
+  // The same off-centre frustum the raymarcher uses. Centred, this camera drew
+  // the sprites into a rectangle of sky that the shifted screen only partly
+  // overlaps, so the leftmost third of the frame sampled outside the target and
+  // got nothing — the one part of the scene with no parallax in it, in the part
+  // of the scene that most needed some.
   const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100000);
+  applyComposeShiftProjection(camera, camera.fov, camera.aspect);
 
   const sceneLensed = new THREE.Scene();
   const sceneUnlensed = new THREE.Scene();
@@ -206,7 +218,7 @@ export function createParticleSystem() {
   };
 
   // Layer 1: many small crisp stars (bulk of the field)
-  const COUNT_S = 2200;
+  const COUNT_S = skyLayers.dust ? 2200 : 0;
   const posS = new Float32Array(COUNT_S * 3);
   for (let i = 0; i < COUNT_S; i++) {
     const theta = Math.random() * Math.PI * 2;
@@ -222,7 +234,7 @@ export function createParticleSystem() {
   sceneLensed.add(new THREE.Points(geoS, materialS));
 
   // Layer 2: fewer brighter slightly-larger stars (foreground highlights)
-  const COUNT_B = 300;
+  const COUNT_B = skyLayers.dust ? 300 : 0;
   const posB = new Float32Array(COUNT_B * 3);
   for (let i = 0; i < COUNT_B; i++) {
     const theta = Math.random() * Math.PI * 2;
@@ -245,7 +257,7 @@ export function createParticleSystem() {
     targetLensed.setSize(width, height);
     targetUnlensed.setSize(width, height);
     camera.aspect = width / height;
-    camera.updateProjectionMatrix();
+    applyComposeShiftProjection(camera, camera.fov, camera.aspect);
   }
 
   function dispose() {

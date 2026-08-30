@@ -49,9 +49,14 @@ npm run dev
 Create the original procedural space textures with:
 
 ```bash
+node scripts/generate-star-noise.mjs
 python scripts/generate_milkyway.py --output assets/milkyway-preview.jpg
-python scripts/generate_star_noise.py
 ```
+
+The star field is meant to be re-run and looked at. `--help` lists every knob;
+`--range` sets how far the brightest star is above the faintest, `--band` how
+hard the stars crowd into the galactic plane, and `--clump` how much of the
+field belongs to clusters rather than being scattered. It takes about a second.
 
 ## Licensing
 
