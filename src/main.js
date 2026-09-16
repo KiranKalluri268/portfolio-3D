@@ -17,7 +17,9 @@ import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
 (async () => {
 
   const labParams = new URLSearchParams(window.location.search);
-  const connectedJourney = labParams.get('journey') === 'connected';
+  const legacyWorld = labParams.get('world') === 'old';
+  const connectedJourney = !legacyWorld && (labParams.get('journey') === 'connected' ||
+    (!labParams.has('journey') && !labParams.has('world') && !labParams.has('flight')));
   const galaxyJourney = connectedJourney || labParams.get('journey') === 'galaxy';
   const openSpace = !galaxyJourney && labParams.get('flight') === 'open';
 

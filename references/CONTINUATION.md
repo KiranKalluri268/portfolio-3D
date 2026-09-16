@@ -2,6 +2,9 @@
 
 ## Latest checkpoint (2026-09-16)
 
+The connected journey is now the default `/`; `/?journey=connected` remains
+an alias. Use `/?world=old` for the original four-act cinematic reference.
+
 `/?journey=connected` now uses the LAB 07 textured, animated wormhole and LAB 06
 live-world black hole around the existing tunnel, upgraded galaxy and second
 hyperspace leg. See the first section of `connected-journey-experiment.md`.

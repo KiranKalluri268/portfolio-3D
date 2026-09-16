@@ -7,6 +7,12 @@ exactly.
 
 ## The journey
 
+The default `/` runs the connected live-world journey: wormhole, tunnel,
+star flight, galaxy fly-through, second hyperspace leg, and black-hole fall.
+`/?journey=connected` remains an alias. The original four-act experience is
+available at `/?world=old`. Standalone world and other experiment routes remain
+available at their existing query URLs.
+
 The original route remains a four-act legacy reference, laid out in `JOURNEY` in
 `src/main.js` in viewport units of scroll. The accepted direction is now a shared
 infinite star world with shader destinations placed inside it.

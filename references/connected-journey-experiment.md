@@ -24,6 +24,9 @@ from this update. Nothing has been ported to `my-portfolio`.
 
 ## Live-world destination integration (2026-09-16)
 
+Open `/` for this journey. `/?journey=connected` remains an alias, and the
+original cinematic reference has moved to `/?world=old`.
+
 The opening now mounts `worldWormhole.js` in the resident world used by the
 galaxy flight: textured interior, brighter curved sky halo and 0.05 rad/s
 optical drift. The galaxy stays hidden until after the tunnel. The original

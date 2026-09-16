@@ -32,7 +32,7 @@ try {
       }
     }
   });
-  await page.goto('http://127.0.0.1:5174/?journey=connected&inspect');
+  await page.goto('http://127.0.0.1:5174/?inspect');
   await page.locator('#loading-overlay.ready-to-enter').waitFor({ timeout: 90000 });
   await page.keyboard.press('Enter');
   await page.locator('#loading-overlay').waitFor({ state: 'detached', timeout: 15000 });
