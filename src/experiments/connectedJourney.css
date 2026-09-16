@@ -1,0 +1,6 @@
+body.connected-world { height: 4800vh !important; margin: 0; }
+.connected-world .world-panel { z-index: 25; }
+.connected-world .world-crosshair, .connected-world .world-hint { display: none; }
+.connected-world .guided-stage { z-index: 25; }
+.connected-world .connected-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.connected-world #source-license-links { display: none; }

@@ -1,0 +1,20 @@
+html:has(.free-world), body.free-world { height: 100%; overflow: hidden; overscroll-behavior: none; background: #010207; }
+.world-panel { position: fixed; z-index: 10; top: 24px; right: 24px; width: min(330px, calc(100vw - 72px)); padding: 22px; border: 1px solid #ffffff26; border-radius: 14px; background: #090f1aee; color: #e3eaf2; font: 13px/1.5 system-ui,sans-serif; }
+.world-panel header { display: flex; justify-content: space-between; gap: 12px; font-size: 10px; letter-spacing: .12em; color: #9ac2d3; }
+.world-panel a { color: #acbed1; letter-spacing: 0; }
+.world-panel h1 { font: 500 23px/1.2 system-ui,sans-serif; letter-spacing: -.04em; margin: 22px 0 12px; }
+.world-panel p { color: #a9b8ca; }
+.world-panel button, .world-panel select { font: inherit; cursor: pointer; color: #d6e7f0; background: #1a2839; border: 1px solid #ffffff24; border-radius: 6px; padding: 8px 12px; }
+.world-panel [data-enter] { background: #c2e3ec; color: #11212c; width: 100%; margin: 8px 0 18px; }
+.world-settings { display: grid; gap: 14px; }
+.world-settings label { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+.world-settings input { width: 125px; accent-color: #b9dce8; }
+.world-settings input[type="checkbox"] { width: auto; }
+.world-footnote { font-size: 11px; }
+.world-panel output { display: block; border-top: 1px solid #ffffff18; padding-top: 12px; color: #7f94ae; font-size: 10px; font-variant-numeric: tabular-nums; }
+.world-crosshair { position: fixed; z-index: 5; left: 50%; top: 50%; width: 4px; height: 4px; border-radius: 50%; background: #e7f5f3; transform: translate(-50%, -50%); box-shadow: 0 0 0 1px #0008; pointer-events: none; }
+.world-hint { display: none; position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); color: #a8b7c9; font: 11px system-ui,sans-serif; pointer-events: none; white-space: nowrap; }
+.world-locked .world-panel { display: none; }
+.world-locked .world-hint { display: block; }
+.world-panel :is(button,input,select,a):focus-visible { outline: 2px solid #b4e4ef; outline-offset: 3px; }
+@media (max-width: 600px) { .world-panel { top: 12px; right: 12px; padding: 18px; width: calc(100vw - 62px); } }

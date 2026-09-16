@@ -6,6 +6,7 @@ import { CameraDragControls } from "../camera/CameraDragControls";
 import { Observer } from "../camera/Observer";
 import { Vector2 } from 'three/src/math/Vector2';
 import { applyComposeShiftProjection } from './composeShift';
+import { CELL_SIZE, nearbyCells, generateCell } from '../experiments/worldModel.mjs';
 import fragmentShader from './fragmentShader.glsl?raw';
 import starUrl from '../../assets/star_noise-generated.png';
 import milkywayUrl from '../../assets/milkyway-preview.jpg';
@@ -56,15 +57,17 @@ export function createCamera(renderer) {
   }
 }
 
-export function loadTextures(onProgress = () => {}) {
+export function loadTextures(onProgress = () => {}, { sky = true } = {}) {
   const textures = new Map();
   const textureLoader = new THREE.TextureLoader()
   const pending = [];
   let loadedCount = 0;
-  const totalCount = 3;
+  const totalCount = sky ? 3 : 1;
 
-  loadTexture('bg1', milkywayUrl, THREE.NearestFilter)
-  loadTexture('star', starUrl, THREE.LinearFilter)
+  if (sky) {
+    loadTexture('bg1', milkywayUrl, THREE.NearestFilter)
+    loadTexture('star', starUrl, THREE.LinearFilter)
+  }
   loadTexture('disk', diskUrl, THREE.LinearFilter)
 
   function dispose() {
@@ -101,8 +104,40 @@ export function loadTextures(onProgress = () => {}) {
   }
 }
 
+// Equirectangular view of the same seeded cells used by the 3D particle field.
+// The tunnel uses this as a world-facing wall/exit sample; it is regenerated
+// from worldModel rather than being an authored sky asset.
+export function createWorldSkyTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024; canvas.height = 512;
+  const context = canvas.getContext('2d');
+  context.fillStyle = '#010207';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  for (const [cellX, cellY, cellZ] of nearbyCells([0, 0, 0])) {
+    const data = generateCell(cellX, cellY, cellZ);
+    for (let i = 0; i < 288; i++) {
+      const p = i * 3;
+      const x = cellX * CELL_SIZE + data.positions[p];
+      const y = cellY * CELL_SIZE + data.positions[p + 1];
+      const z = cellZ * CELL_SIZE + data.positions[p + 2];
+      const radius = Math.max(0.001, Math.hypot(x, y, z));
+      const u = (Math.atan2(z, x) / (Math.PI * 2) + 0.5) * canvas.width;
+      const v = (0.5 - Math.asin(Math.max(-1, Math.min(1, y / radius))) / Math.PI) * canvas.height;
+      const size = data.sizes[i] * (data.sizes[i] > 1.5 ? 1.3 : 0.75);
+      context.fillStyle = `rgba(${Math.round(data.colors[p] * 255)},${Math.round(data.colors[p + 1] * 255)},${Math.round(data.colors[p + 2] * 255)},${Math.min(1, 0.45 + size * 0.2)})`;
+      context.fillRect(u, v, size, size);
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.needsUpdate = true;
+  return texture;
+}
 
-export async function createShaderProjectionPlane(uniforms) {
+
+export async function createShaderProjectionPlane(uniforms, { openSpace = false } = {}) {
 
   const vertexShader = document.getElementById('vertexShader')?.textContent
   if (!vertexShader) {
@@ -152,6 +187,7 @@ export async function createShaderProjectionPlane(uniforms) {
         NSTEPS = 500;
     }
     return `
+  ${openSpace ? '#define OPEN_SPACE_EXPERIMENT' : ''}
   #define STEP ${STEP} 
   #define NSTEPS ${NSTEPS} 
 `
@@ -192,7 +228,8 @@ export function createParticleSystem(skyLayers = { dust: true }) {
   let targetWidth = window.innerWidth;
   let targetHeight = window.innerHeight;
 
-  // 2500 points in a flattened shell (r = 8..42) around the BH
+  // The raymarcher samples these render targets along its bent rays. Keep the
+  // source identical to LAB 03: signed seeded cells, not a radial shell.
   // ── Shared circular sprite — tight core, fast falloff (no large shadow halo)
   const canvas = document.createElement('canvas');
   canvas.width = 64; canvas.height = 64;
@@ -217,36 +254,39 @@ export function createParticleSystem(skyLayers = { dust: true }) {
     alphaTest: 0.005,
   };
 
-  // Layer 1: many small crisp stars (bulk of the field)
-  const COUNT_S = skyLayers.dust ? 2200 : 0;
-  const posS = new Float32Array(COUNT_S * 3);
-  for (let i = 0; i < COUNT_S; i++) {
-    const theta = Math.random() * Math.PI * 2;
-    const phi   = Math.acos(2 * Math.random() - 1);
-    const r     = 8 + Math.random() * 34;
-    posS[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
-    posS[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.25;
-    posS[i * 3 + 2] = r * Math.cos(phi);
+  const worldCells = nearbyCells([0, 0, 0]);
+  const worldCount = skyLayers.dust ? worldCells.length * 288 : 0;
+  const posS = new Float32Array(worldCount * 3);
+  const colorS = new Float32Array(worldCount * 3);
+  let worldIndex = 0;
+  for (const [cellX, cellY, cellZ] of worldCells) {
+    const data = generateCell(cellX, cellY, cellZ);
+    for (let i = 0; i < 288 && worldIndex < worldCount; i++, worldIndex++) {
+      const source = i * 3;
+      const target = worldIndex * 3;
+      posS[target] = cellX * CELL_SIZE + data.positions[source];
+      posS[target + 1] = cellY * CELL_SIZE + data.positions[source + 1];
+      posS[target + 2] = cellZ * CELL_SIZE + data.positions[source + 2];
+      colorS[target] = data.colors[source];
+      colorS[target + 1] = data.colors[source + 1];
+      colorS[target + 2] = data.colors[source + 2];
+    }
   }
   const geoS = new THREE.BufferGeometry();
   geoS.setAttribute('position', new THREE.BufferAttribute(posS, 3));
-  const materialS = new THREE.PointsMaterial({ ...matBase, size: 0.08 });
+  geoS.setAttribute('color', new THREE.BufferAttribute(colorS, 3));
+  const materialS = new THREE.PointsMaterial({ ...matBase, size: 0.09, vertexColors: true });
   sceneLensed.add(new THREE.Points(geoS, materialS));
 
-  // Layer 2: fewer brighter slightly-larger stars (foreground highlights)
-  const COUNT_B = skyLayers.dust ? 300 : 0;
-  const posB = new Float32Array(COUNT_B * 3);
-  for (let i = 0; i < COUNT_B; i++) {
-    const theta = Math.random() * Math.PI * 2;
-    const phi   = Math.acos(2 * Math.random() - 1);
-    const r     = 8 + Math.random() * 30;
-    posB[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
-    posB[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) * 0.25;
-    posB[i * 3 + 2] = r * Math.cos(phi);
-  }
+  // A second pass adds a little emphasis to the same positions. It is not a
+  // second world: it reuses the seeded data and only changes point size.
+  const posB = new Float32Array(worldCount * 3);
+  const colorB = new Float32Array(worldCount * 3);
+  posB.set(posS); colorB.set(colorS);
   const geoB = new THREE.BufferGeometry();
   geoB.setAttribute('position', new THREE.BufferAttribute(posB, 3));
-  const materialB = new THREE.PointsMaterial({ ...matBase, size: 0.11 });
+  geoB.setAttribute('color', new THREE.BufferAttribute(colorB, 3));
+  const materialB = new THREE.PointsMaterial({ ...matBase, size: 0.13, vertexColors: true, opacity: 0.15 });
   sceneUnlensed.add(new THREE.Points(geoB, materialB));
 
   function resize(width, height) {

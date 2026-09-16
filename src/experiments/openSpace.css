@@ -1,0 +1,34 @@
+.space-lab {
+  position: fixed; top: 24px; right: 24px; z-index: 25;
+  width: min(330px, calc(100vw - 64px)); padding: 20px;
+  color: #e7e9ee; background: rgba(8, 12, 21, .9);
+  border: 1px solid #ffffff24; border-radius: 16px;
+  font: 12px/1.5 system-ui, sans-serif;
+}
+.space-lab-heading, .space-lab-position { display: flex; justify-content: space-between; gap: 12px; color: #8f9db2; font-size: 10px; }
+.space-lab-heading > span { letter-spacing: .18em; }
+.space-lab a { color: #bac9db; }
+.space-lab h1 { font: 500 24px/1.2 system-ui, sans-serif; letter-spacing: -.04em; margin: 18px 0 8px; }
+.space-lab p { color: #a5b1c3; margin: 0 0 18px; }
+.space-lab-modes { display: flex; gap: 6px; }
+.space-lab button { cursor: pointer; font: inherit; color: #b6c4d8; border: 1px solid #ffffff20; border-radius: 7px; padding: 9px 12px; background: #ffffff05; }
+.space-lab-modes button { flex: 1; }
+.space-lab button[aria-pressed="true"] { color: #101820; background: #c5e0e8; }
+.space-lab button:focus-visible, .space-lab input:focus-visible, .space-lab a:focus-visible { outline: 2px solid #b9edf5; outline-offset: 3px; }
+.space-lab-look { display: flex; align-items: center; gap: 10px; margin: 18px 0; }
+.space-lab-look input { flex: 1; min-width: 0; accent-color: #b4d6e3; }
+.space-lab output { width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.space-lab-options { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.space-lab-options label { display: flex; align-items: center; gap: 4px; }
+.space-lab-options input { accent-color: #b4d6e3; }
+.space-lab-options button { padding: 5px 8px; margin-left: auto; }
+.space-lab-position { border-top: 1px solid #ffffff16; margin-top: 16px; padding-top: 12px; }
+.is-loading .space-lab { visibility: hidden; }
+.open-space-lab #story-overlay, .open-space-lab #source-license-links { display: none; }
+@media (max-width: 600px) {
+  .space-lab { top: auto; bottom: 16px; right: 12px; padding: 14px; width: calc(100vw - 54px); }
+  .space-lab h1 { font-size: 20px; margin: 10px 0 5px; }
+  .space-lab p { margin-bottom: 10px; }
+  .space-lab-look { margin: 12px 0; }
+  .space-lab-position { margin-top: 10px; padding-top: 8px; }
+}

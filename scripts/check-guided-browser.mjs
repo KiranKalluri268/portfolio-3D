@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { mkdir } from 'node:fs/promises';
+const { chromium } = await import('../../my-portfolio/node_modules/playwright/index.mjs');
+const browser = await chromium.launch({ channel: 'chrome', headless: true });
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  await page.goto('http://127.0.0.1:5174/?world=guided&inspect');
+  await page.waitForFunction(() => window.__freeWorld?.().journey);
+  await page.mouse.wheel(0, 1200);
+  await page.waitForFunction(() => window.__freeWorld().journey.progress > 0.05);
+  assert.equal(await page.evaluate(() => document.pointerLockElement), null);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.waitForFunction(() => window.__freeWorld().journey.progress === 1);
+  const arrival = await page.evaluate(() => window.__freeWorld());
+  assert.equal(arrival.journey.stage, 'Galaxy arrival');
+  assert.equal(arrival.cells, 125);
+  await mkdir('screenshots/guided', { recursive: true });
+  await page.getByText('Hide panel', { exact: true }).click();
+  await page.screenshot({ path: 'screenshots/guided/arrival.png' });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForFunction(() => window.__freeWorld().journey.progress === 0);
+  assert.ok((await page.evaluate(() => window.__freeWorld().position)).every(value => Math.abs(value) < 1e-6));
+  await page.setViewportSize({ width: 430, height: 932 });
+  await page.getByText('Show controls', { exact: true }).click();
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.screenshot({ path: 'screenshots/guided/mobile.png' });
+  assert.deepEqual(errors, []);
+  console.log('Guided journey: native wheel, arrival, reverse, bounded cells, portrait and runtime checks pass.');
+} finally { await browser.close(); }

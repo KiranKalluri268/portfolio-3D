@@ -1,6 +1,6 @@
 /* globals THREE dat Stats Observer*/
 import * as THREE from 'three';
-import { createCamera, createRenderer, createScene, createShaderProjectionPlane, loadTextures, createParticleSystem } from './graphics/render';
+import { createCamera, createRenderer, createScene, createShaderProjectionPlane, loadTextures, createParticleSystem, createWorldSkyTexture } from './graphics/render';
 import { createStatsGUI } from './gui/statsGUI';
 import { createConfigGUI } from './gui/datGUI';
 import { createPresetSwitcher } from './gui/presetSwitcher';
@@ -11,9 +11,15 @@ import { createPlanet } from './graphics/planet';
 import { applyComposeShiftProjection } from './graphics/composeShift';
 import Lenis from 'lenis';
 import { resolveSkyLayers, resolveStarGain } from './skyLayers';
+import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
 
 
 (async () => {
+
+  const labParams = new URLSearchParams(window.location.search);
+  const connectedJourney = labParams.get('journey') === 'connected';
+  const galaxyJourney = connectedJourney || labParams.get('journey') === 'galaxy';
+  const openSpace = !galaxyJourney && labParams.get('flight') === 'open';
 
   const loadingOverlay = document.getElementById('loading-overlay')
   const loadingPercentage = document.getElementById('loading-percentage')
@@ -172,6 +178,7 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
     disk_texture: { type: "t", value: null },
     particle_texture: { type: "t", value: null },
     particle_texture_unlensed: { type: "t", value: null },
+    world_particles: { type: "f", value: connectedJourney ? 1.0 : 0.0 },
     planet_texture: { type: "t", value: null },
     planet_amount: { type: "f", value: 0.0 },
     show_lensing: { type: "b", value: true },
@@ -318,7 +325,9 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
   // simply furthest from either edge. One global tier has to survive the most
   // expensive stretch, so that is the stretch to stand in.
   const BENCHMARK_APPROACH_PROGRESS = 0.30
-  const BENCHMARK_POSE_UNITS =
+  // The galaxy experiment never draws the black-hole fall. Judge its actual
+  // raymarched opening, not the much cheaper raster destination after it.
+  const BENCHMARK_POSE_UNITS = galaxyJourney ? 0 :
     JOURNEY.arrivalEnd + (JOURNEY.approachEnd - JOURNEY.arrivalEnd) * BENCHMARK_APPROACH_PROGRESS
 
   // The pose is only ever held behind the loading overlay. The entry gate cannot
@@ -348,9 +357,9 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
   // init graphics — textures load async; ready resolves when all are done
   const { textures, ready, disposeTextures } = loadTextures(({ loaded, total }) => {
     setLoadingStage(`Loading assets... ${loaded} / ${total}`, 10 + (loaded / total) * 60)
-  });
+  }, { sky: !connectedJourney });
   setLoadingStage('Compiling black hole shader...', 18)
-  const { mesh, changePerformanceQuality, disposeShaderPlane } = await createShaderProjectionPlane(uniforms);
+  const { mesh, changePerformanceQuality, disposeShaderPlane } = await createShaderProjectionPlane(uniforms, { openSpace });
   // add shader plane to scene
   scene.add(mesh);
   setLoadingStage('Initializing camera...', 22)
@@ -369,14 +378,25 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
     particleCamera,
     resizeParticleTargets,
     disposeParticleSystem
-  } = createParticleSystem(skyLayers);
+  } = createParticleSystem(openSpace ? { dust: false } : skyLayers);
   uniforms.particle_texture.value = particleTargetLensed.texture;
   uniforms.particle_texture_unlensed.value = particleTargetUnlensed.texture;
+
+  const flight = openSpace
+    ? (await import('./experiments/openSpace')).createOpenSpaceExperiment(composer, renderer.domElement)
+    : null;
+  const travel = connectedJourney
+    ? await (await import('./experiments/connectedJourney')).createConnectedJourney(renderer)
+    : galaxyJourney
+    ? (await import('./experiments/galaxyJourney')).createGalaxyJourney(renderer.domElement)
+    : null;
+  let galaxyFrame = null;
 
   // The passage between the two worlds. Rendered through the same composer, so
   // it inherits bloom without a second post-processing chain.
   const { tunnelScene, tunnelCamera, updateTunnel, resizeTunnel, disposeTunnel, setTunnelTextures } =
     createTunnel(window.innerWidth / window.innerHeight);
+  const sharedTunnelTexture = connectedJourney ? createWorldSkyTexture() : null;
   let tunnelActive = false;
 
   // Somewhere to arrive. Rendered to its own target and sampled by the shader —
@@ -402,7 +422,8 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
     uniforms.star_texture.value = textures.get('star')
     uniforms.disk_texture.value = textures.get('disk')
     // The passage borrows the world's sky plates for its walls.
-    setTunnelTextures(textures.get('star'), textures.get('bg1'))
+    setTunnelTextures(sharedTunnelTexture ?? textures.get('star'), sharedTunnelTexture ?? textures.get('bg1'))
+    travel?.setTextures(textures.get('star'), textures.get('bg1'))
   });
 
   // GUI
@@ -658,6 +679,9 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
     smoothWheel: true,
   });
   lenis.stop();
+  travel?.setNavigator((units) => {
+    if (loadingOverlayDismissed) lenis.scrollTo(units * window.innerHeight, { immediate: true });
+  });
 
   // start render loop immediately (renders black until textures arrive)
   // requestAnimationFrame passes a high-res timestamp automatically
@@ -683,9 +707,19 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
     // fall instead of from scroll. This works because every value below is a
     // pure function of this number, so there is nothing to restore afterwards —
     // the frame after the benchmark ends reads scroll again and retraces itself.
-    const scrollViewportUnits = benchmarkPoseActive()
+    const routeViewportUnits = benchmarkPoseActive()
       ? BENCHMARK_POSE_UNITS
-      : lenis.scroll / Math.max(1, window.innerHeight);
+      : openSpace
+        ? JOURNEY.arrivalEnd + (JOURNEY.approachEnd - JOURNEY.arrivalEnd) *
+          Math.min(1, lenis.scroll / Math.max(1, 27 * window.innerHeight))
+        : lenis.scroll / Math.max(1, window.innerHeight);
+    // LAB 05 has its own longer route. Once its second hyperspace leg ends,
+    // remap those units onto the original black-hole approach so it begins at
+    // the distant arrival pose instead of snapping to the old journey's end.
+    const scrollViewportUnits = connectedJourney && routeViewportUnits > 37
+      ? JOURNEY.arrivalEnd + blackHoleProgress(routeViewportUnits) *
+        (JOURNEY.approachEnd - JOURNEY.arrivalEnd)
+      : routeViewportUnits;
     storyOverlay.update(scrollViewportUnits)
     if (benchmarkStarted) {
       // Past the tunnel is the fall, where the raymarcher is close, the disk
@@ -695,7 +729,9 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
       // survive what comes next. The manager uses this for upgrades only; it
       // protects the frame rate everywhere.
       qualityManager.update(frameTimestamp, {
-        representative: scrollViewportUnits > JOURNEY.tunnelEnd,
+        representative: galaxyJourney
+          ? scrollViewportUnits <= JOURNEY.crossingEnd
+          : scrollViewportUnits > JOURNEY.tunnelEnd,
       });
     }
     if (frameTimestamp - lastDiagnosticsUpdate >= 250) {
@@ -840,6 +876,16 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
     // The two worlds swap outright rather than blending, because the swap happens
     // while the arrival veil is still fully opaque and nothing of it is on screen.
     updateWorldAppearance(pastTunnel ? 0 : 1);
+    if (connectedJourney) {
+      // This route borrows the wormhole, not its old surrounding universe.
+      uniforms.bg_star_gain.value = 0;
+      uniforms.bg_nebula_gain.value = 0;
+      uniforms.arm_gain.value = 0;
+      uniforms.space_color_plane.value.set(0, 0, 0);
+      uniforms.space_color_pole.value.set(0, 0, 0);
+      uniforms.throat_star_gain.value = 0;
+      uniforms.throat_nebula_gain.value = 0;
+    }
 
     // The scene blows out into the crossing rather than being covered up by
     // something bright. An overlay on its own is a white rectangle appearing in
@@ -937,6 +983,34 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
     const roll = pastTunnel ? endRoll * approachEase : 0;
     observer.up.set(0, 1, 0).applyAxisAngle(observer.direction, roll);
 
+    if (flight) {
+      cameraControl.enabled = false;
+      flight.update(approachProgress, observer);
+      // The experiment is a single approach, with no transition veil or roll.
+      if (transitionVeil) transitionVeil.style.opacity = '0';
+      if (cockpitVignette) cockpitVignette.style.opacity = '0';
+      uniforms.space_color_plane.value.set(0, 0, 0);
+      uniforms.space_color_pole.value.set(0, 0, 0);
+    }
+
+    galaxyFrame = travel?.update(routeViewportUnits) ?? null;
+    if (galaxyFrame) {
+      // The original crossing, flash and tunnel above run untouched. Beyond the
+      // tunnel, the timeline selects raster destinations instead of the fall.
+      if (transitionVeil && !galaxyFrame.preserveVeil) {
+        transitionVeil.style.backgroundColor = galaxyFrame.reduced ? '#000000' : '#e9f7ff';
+        transitionVeil.style.opacity = String(galaxyFrame.state.veil);
+        // Invalidate the original veil cache so reverse scroll into the tunnel
+        // restores its colour and opacity even when its numbers did not change.
+        veilColor = '';
+        veilOpacity = -1;
+      }
+      if (cockpitVignette) cockpitVignette.style.opacity = '0';
+      bloomPass.strength = galaxyFrame.reduced ? 0.35 : 0.7 + galaxyFrame.state.streak * 0.2;
+      bloomPass.radius = 0.55;
+      bloomPass.threshold = 0.4;
+    }
+
     // slowly revolve particles around the BH when toggle is on
     if (cameraConfig.particleOrbit) {
       particleSceneLensed.rotation.y += delta * 0.01  // ~1 full revolution per ~2.5 min
@@ -968,6 +1042,14 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
     // update shader variables
     updateUniforms()
 
+    if (connectedJourney && labParams.has('inspect')) {
+      window.__connectedJourney = {
+        units: routeViewportUnits, distance: travel?.inspect?.().destination?.distance ?? observer.distance,
+        destination: travel?.inspect?.().destination,
+        fallProgress: blackHoleProgress(routeViewportUnits),
+        veil: Number(transitionVeil?.style.opacity ?? 0),
+      };
+    }
     // render
     render();
 
@@ -977,6 +1059,17 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
   }
 
   function render() {
+    if (galaxyFrame) {
+      // One active destination, one composer. In particular, do not render the
+      // raymarcher or its particle targets behind the galaxy or hyperspace.
+      renderPass.scene = galaxyFrame.scene;
+      renderPass.camera = galaxyFrame.camera;
+      renderer.setRenderTarget(null);
+      if (galaxyFrame.render) galaxyFrame.render();
+      else if (galaxyFrame.direct) renderer.render(galaxyFrame.scene, galaxyFrame.camera);
+      else composer.render();
+      return;
+    }
     // Swapping what the existing RenderPass points at is the whole handover —
     // bloom, sizing and the composer chain are shared by both worlds.
     if (tunnelActive) {
@@ -1138,11 +1231,13 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
       particleCameraAspect = nextParticleAspect
       particleCamera.fov = particleCameraFov
       particleCamera.aspect = particleCameraAspect
-      applyComposeShiftProjection(particleCamera, particleCameraFov, particleCameraAspect)
+      if (openSpace) particleCamera.updateProjectionMatrix()
+      else applyComposeShiftProjection(particleCamera, particleCameraFov, particleCameraAspect)
     }
     particleCamera.position.copy(observer.position)
     particleCamera.up.copy(observer.up)
-    particleCamera.lookAt(0, 0, 0)
+    if (openSpace) particleCamera.lookAt(observer.position.clone().add(observer.direction))
+    else particleCamera.lookAt(0, 0, 0)
     particleCamera.updateMatrixWorld()
 
   }
@@ -1173,8 +1268,11 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
     disposeGUI();
     presetSwitcher.dispose();
     storyOverlay.dispose();
+    flight?.dispose();
+    travel?.dispose();
     disposeParticleSystem();
     disposeTunnel();
+    sharedTunnelTexture?.dispose();
     planet?.disposePlanet();
     disposeShaderPlane();
     disposeScene();

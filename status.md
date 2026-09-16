@@ -1,5 +1,50 @@
 # Status
 
+## Current foundation — free world (2026-09-10)
+
+`?world=free` is the latest experiment. Click to capture the mouse, look freely,
+and scroll to move along the current heading. Escape releases the cursor.
+The 1×/10× selector changes camera travel distance through a stable, seeded 3D
+particle world. Nearby cells load and distant cells are disposed as you travel.
+
+The build and world-model/browser checks pass, including actual pointer lock,
+mouse look, Escape, directional wheel travel, cell crossings and memory bounds.
+See [`references/free-world-experiment.md`](references/free-world-experiment.md).
+The galaxy/hyperspace study below is retained for reference; its separate moving
+streak field was rejected as a foundation for convincing movement.
+
+---
+
+## Active lab experiment — wormhole to galaxy (2026-09-09)
+
+`?journey=galaxy` keeps the current wormhole and tunnel, emerges into open space,
+then uses hyperspace to reach a portfolio-galaxy placeholder. One destination
+renders at a time; the black hole is absent after the tunnel. Scroll backward to
+retrace it. Stage buttons and a collapsible panel make comparison easier.
+
+Build, seven unit tests, and desktop/portrait browser checks pass. Browser GPU
+draw-call checks confirm the raymarcher and tunnel stop rendering outside their
+stages. Real-phone motion review and performance measurements remain pending.
+
+See [`references/galaxy-journey-experiment.md`](references/galaxy-journey-experiment.md)
+for the revised direction, timeline, controls and validation. The older camera
+study below is retained, and `my-portfolio` remains untouched.
+
+---
+
+## Active lab experiment — open space (2026-09-09)
+
+`?flight=open` opens a camera/depth prototype with a free-heading scroll flight,
+an orbit-camera comparison, a look-around control, stationary landmarks and
+world-space dust. The original journey remains at `/`. See
+[`references/open-space-experiment.md`](references/open-space-experiment.md)
+for usage, verification and the prototype's compositing limitations.
+
+Visual review and device measurements are still pending. Nothing from this
+experiment has been ported to `my-portfolio`.
+
+---
+
 Running notes on work that is parked mid-flight. Anything here is unfinished by
 choice, not forgotten — each section records where it was left, why, and what
 has to be decided before it can be picked up again.

@@ -7,7 +7,9 @@ exactly.
 
 ## The journey
 
-Four acts, laid out in `JOURNEY` in `src/main.js` in viewport units of scroll.
+The original route remains a four-act legacy reference, laid out in `JOURNEY` in
+`src/main.js` in viewport units of scroll. The accepted direction is now a shared
+infinite star world with shader destinations placed inside it.
 
 1. **The crossing** (0 → 5.0). Cross to a wormhole and close on it until its
    mouth runs off every edge of the frame.
@@ -40,6 +42,29 @@ also where the frame budget for it comes from.
 | `scripts/` | Generators for the procedural sky plates |
 
 ## Development
+
+Three opt-in LAB views are available alongside the original journey:
+
+- `/?world=free` — current foundation: a seeded 3D particle world, first-person
+  mouse look and scroll travel along the viewing direction. Click to capture,
+  Escape to release. See [the free-world notes](references/free-world-experiment.md).
+
+- `/?world=guided` — scroll-driven reference timing: calm flight, acceleration,
+  hyperspace, deceleration and galaxy arrival. See [the guided-world notes](references/guided-world-experiment.md).
+
+- `/?journey=connected` — integration checkpoint: existing wormhole/tunnel handoff
+  into the guided world. It is the place to continue shared-world lensing work;
+  see [the connected-journey notes](references/connected-journey-experiment.md).
+
+- `/?journey=galaxy` — current wormhole and tunnel → open-space arrival →
+  hyperspace → portfolio-galaxy placeholder. See
+  [the experiment notes](references/galaxy-journey-experiment.md).
+- `/?flight=open` — compare independent camera movement with an orbit camera.
+  See [the camera study](references/open-space-experiment.md).
+
+On Windows PowerShell, use `npm.cmd` if execution policy blocks `npm.ps1`.
+For phone access on the same network, use `npm.cmd run dev -- --host 0.0.0.0`
+and open the Network URL Vite prints.
 
 ```bash
 npm install

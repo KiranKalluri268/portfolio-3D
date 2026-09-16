@@ -1,0 +1,9 @@
+html:has(.guided-world) { height: auto; overflow-y: auto; }
+body.free-world.guided-world { height: 2050vh; overflow: visible; margin: 0; }
+.guided-world canvas { position: fixed; inset: 0; touch-action: pan-y; }
+.guided-world .world-crosshair { display: none; }
+.guided-world [hidden] { display: none !important; }
+.guided-controls { display: grid; gap: 10px; margin-top: 16px; }
+.guided-controls label { display: flex; gap: 8px; align-items: center; }
+.guided-stage { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); color: #b9dce8; font: 13px system-ui; letter-spacing: .15em; pointer-events: none; }
+.guided-restore { position: fixed; top: 16px; right: 16px; z-index: 12; padding: 12px; background: #090f1aee; color: #d6e7f0; border: 1px solid #ffffff26; border-radius: 8px; cursor: pointer; }

@@ -35,7 +35,11 @@ const float TEMPERATURE_RANGE = 39000.0;
 //
 // Applied before the aspect scaling, so this is a fraction of the width and the
 // composition holds its proportions on any viewport.
+#ifdef OPEN_SPACE_EXPERIMENT
+const float COMPOSE_SHIFT = 0.0;
+#else
 const float COMPOSE_SHIFT = 0.67;
+#endif
 
 // The same thing vertically, in half-screens up. The reference does not show a
 // whole black hole: its shadow centres above the top third and runs off the top
@@ -50,7 +54,11 @@ const float COMPOSE_SHIFT = 0.67;
 // reference's is outside it: lifting the frame puts more near-side disk under the
 // black hole rather than the empty dark the reference has there, and by 0.46 the
 // bottom half of the frame is nothing else.
+#ifdef OPEN_SPACE_EXPERIMENT
+const float COMPOSE_SHIFT_Y = 0.0;
+#else
 const float COMPOSE_SHIFT_Y = 0.26;
+#endif
 
 uniform bool accretion_disk;
 uniform bool use_disk_texture;
@@ -66,6 +74,7 @@ uniform sampler2D star_texture;
 uniform sampler2D disk_texture;
 uniform sampler2D particle_texture; // Lensed stars (small)
 uniform sampler2D particle_texture_unlensed; // Unlensed stars (large foreground)
+uniform float world_particles; // shared seeded world is the background source
 uniform sampler2D planet_texture;
 uniform float planet_amount;        // 0 outside the new world, and the target is not even drawn
 uniform bool show_lensing;
@@ -221,6 +230,7 @@ vec3 temp_to_color(float temp_kelvin){
 // One star, decoded. Pulled out of sample_sky so the throat can average several
 // taps of it without duplicating the temperature decode.
 vec3 star_at(vec2 tex_coord, vec3 tint, float star_gain, float doppler_factor){
+  if (star_gain <= 0.0) return vec3(0.0);
   vec4 star_color = texture2D(star_texture, tex_coord);
   if (star_color.g <= 0.0) return vec3(0.0);
   float star_temperature = (MIN_TEMPERATURE + TEMPERATURE_RANGE*star_color.r);
@@ -288,6 +298,19 @@ vec3 galaxy_band(vec3 dir, vec3 pole, vec3 view, vec3 tint, float gain){
   float lane = 1.0 - 0.92 * exp(-(lat*lat) / (WIDTH*WIDTH*0.10));
 
   return tint * gain * (belt*mottle*lane + bulge*1.6);
+}
+
+vec3 shared_world(vec3 sample_dir, vec3 forward, vec3 nright, vec3 up,
+                 float aspect, float uvfov){
+  float fwd_dot = dot(sample_dir, forward);
+  if (fwd_dot <= 0.0) return vec3(0.0);
+  float px = dot(sample_dir, nright) / (fwd_dot * uvfov);
+  float py = dot(sample_dir, up) / (fwd_dot * uvfov);
+  vec2 p_uv = vec2((px / aspect + COMPOSE_SHIFT) * 0.5 + 0.5,
+                   (py + COMPOSE_SHIFT_Y) * 0.5 + 0.5);
+  if (p_uv.x <= 0.0 || p_uv.x >= 1.0 || p_uv.y <= 0.0 || p_uv.y >= 1.0)
+    return vec3(0.0);
+  return texture2D(particle_texture, p_uv).rgb;
 }
 
 // The galaxy this system sits in, with the skill web's domains as its arms.
@@ -376,7 +399,7 @@ vec3 sample_sky(vec3 dir, float rotation, vec3 tint, vec3 plane_color, vec3 pole
   }
 
   sky += mix(plane_color, pole_color, smoothstep(0.0, 0.55, abs(dir.y)));
-  sky += texture2D(bg_texture, tex_coord).rgb * nebula_gain * tint;
+  if (nebula_gain > 0.0) sky += texture2D(bg_texture, tex_coord).rgb * nebula_gain * tint;
   return sky;
 }
 
@@ -625,10 +648,12 @@ void main()	{
     // stretch is a blur by another name, and the streaked stars are the best
     // thing in the frame. They are what the distortion is legible on. Trading
     // their edges for a quieter interior is a bad trade.
-    vec3 far_side = sample_sky(through, throat_sky_rotation, throat_tint,
-                               throat_color_plane, throat_color_pole,
-                               throat_star_gain, throat_nebula_gain, 1.0,
-                               throat_star_blur);
+    vec3 far_side = world_particles > 0.5
+      ? shared_world(through, forward, nright, up, resolution.x / resolution.y, uvfov) * throat_tint
+      : sample_sky(through, throat_sky_rotation, throat_tint,
+                   throat_color_plane, throat_color_pole,
+                   throat_star_gain, throat_nebula_gain, 1.0,
+                   throat_star_blur);
     // Sampled along the same bent direction as the stars, so it is warped by the
     // throat rather than laid over it.
     far_side += galaxy_band(through, throat_band_pole, view,
@@ -655,9 +680,12 @@ void main()	{
     // field that never moved, and the mouth stops reading as a lens. So the
     // direction bends with the ray here, and bg_lensing carries the world.
     vec3 bg_dir = normalize(mix(orig_ray_dir, normalize(velocity), bg_lensing));
-    color += vec4(sample_sky(bg_dir, 45.0, bg_tint,
-                             space_color_plane, space_color_pole,
-                             bg_star_gain, bg_nebula_gain, ray_doppler_factor, 0.0), 1.0);
+    vec3 background = world_particles > 0.5
+      ? shared_world(bg_dir, forward, nright, up, resolution.x / resolution.y, uvfov)
+      : sample_sky(bg_dir, 45.0, bg_tint,
+                   space_color_plane, space_color_pole,
+                   bg_star_gain, bg_nebula_gain, ray_doppler_factor, 0.0);
+    color += vec4(background, 1.0);
 
     // The domains, added over the sky rather than into sample_sky, because
     // sample_sky is shared with the far side of the throat and the wormhole is
