@@ -1,6 +1,6 @@
 /* globals THREE dat Stats Observer*/
 import * as THREE from 'three';
-import { createCamera, createRenderer, createScene, createShaderProjectionPlane, loadTextures, createParticleSystem, createWorldSkyTexture } from './graphics/render';
+import { createCamera, createRenderer, createScene, createShaderProjectionPlane, loadTextures, createParticleSystem } from './graphics/render';
 import { createStatsGUI } from './gui/statsGUI';
 import { createConfigGUI } from './gui/datGUI';
 import { createPresetSwitcher } from './gui/presetSwitcher';
@@ -361,7 +361,7 @@ import { TUNNEL_BLEND_START } from './experiments/wormholeApproach.mjs';
   // init graphics — textures load async; ready resolves when all are done
   const { textures, ready, disposeTextures } = loadTextures(({ loaded, total }) => {
     setLoadingStage(`Loading assets... ${loaded} / ${total}`, 10 + (loaded / total) * 60)
-  }, { sky: !connectedJourney });
+  });
   setLoadingStage('Compiling black hole shader...', 18)
   const { mesh, changePerformanceQuality, disposeShaderPlane } = await createShaderProjectionPlane(uniforms, { openSpace });
   // add shader plane to scene
@@ -399,8 +399,7 @@ import { TUNNEL_BLEND_START } from './experiments/wormholeApproach.mjs';
   // The passage between the two worlds. Rendered through the same composer, so
   // it inherits bloom without a second post-processing chain.
   const { tunnelScene, tunnelCamera, updateTunnel, resizeTunnel, disposeTunnel, setTunnelTextures } =
-    createTunnel(window.innerWidth / window.innerHeight);
-  const sharedTunnelTexture = connectedJourney ? createWorldSkyTexture() : null;
+    createTunnel(window.innerWidth / window.innerHeight, { radius: connectedJourney ? 4.8 : 3.2 });
   let tunnelActive = false;
   const tunnelBlend = connectedJourney ? createSceneBlend(renderer) : null;
 
@@ -427,7 +426,7 @@ import { TUNNEL_BLEND_START } from './experiments/wormholeApproach.mjs';
     uniforms.star_texture.value = textures.get('star')
     uniforms.disk_texture.value = textures.get('disk')
     // The passage borrows the world's sky plates for its walls.
-    setTunnelTextures(sharedTunnelTexture ?? textures.get('star'), sharedTunnelTexture ?? textures.get('bg1'))
+    setTunnelTextures(textures.get('star'), textures.get('bg1'))
     travel?.setTextures(textures.get('star'), textures.get('bg1'))
   });
 
@@ -1300,7 +1299,6 @@ import { TUNNEL_BLEND_START } from './experiments/wormholeApproach.mjs';
     disposeParticleSystem();
     disposeTunnel();
     tunnelBlend?.dispose();
-    sharedTunnelTexture?.dispose();
     planet?.disposePlanet();
     disposeShaderPlane();
     disposeScene();

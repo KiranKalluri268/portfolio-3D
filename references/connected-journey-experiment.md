@@ -26,6 +26,12 @@ from this update. Nothing has been ported to `my-portfolio`.
 
 ### Curved approach and lit tunnel blend (2026-09-17)
 
+Opening framing now places the mouth at roughly 73% of viewport width and 29%
+of viewport height, matching the supplied reference. A broader sideways arc
+and gradual centering make the turn visible. The tunnel uses its original
+encoded star and Milky Way textures again, with radius 4.8 (diameter 9.6),
+50% wider than the old route's radius 3.2. The fully lit entry blend remains.
+
 The opening now starts about 145 world units from the mouth and follows a cubic
 curve, aimed toward the wormhole. The integrated speed profile accelerates
 gently then brakes near entry; the camera ends 0.9 units from the center.

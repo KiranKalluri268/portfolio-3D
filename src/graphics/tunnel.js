@@ -226,7 +226,7 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
-export function createTunnel(aspect = 1) {
+export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS } = {}) {
   const scene = new THREE.Scene();
 
   // What fills the aperture at the far end. The tube is closed all the way
@@ -246,7 +246,7 @@ export function createTunnel(aspect = 1) {
   );
   // Enough tubular segments that the bends are smooth at this length — the wall
   // is only ever a few units from the camera, so faceting shows.
-  const geometry = new THREE.TubeGeometry(curve, 400, TUNNEL_RADIUS, 48, false);
+  const geometry = new THREE.TubeGeometry(curve, 400, radius, 48, false);
 
   const uniforms = {
     uStarTex: { value: null },
