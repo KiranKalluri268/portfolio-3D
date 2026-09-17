@@ -28,6 +28,7 @@ export async function createWorldWormhole(scene, renderer, camera, starMaterial)
       exteriorLensing: { value: 1 },
       skyDrift: { value: 0 },
       throatFunnel: { value: 0 },
+      caveRadius: { value: 1 },
       localCamera: { value: new THREE.Vector3() },
       localToClip: { value: new THREE.Matrix4() },
     },
@@ -63,7 +64,10 @@ export async function createWorldWormhole(scene, renderer, camera, starMaterial)
       skyDrift: material.uniforms.skyDrift },
     advanceSky,
     setVisible(value) { mouth.visible = value; },
-    setFunnel(value) { material.uniforms.throatFunnel.value = THREE.MathUtils.clamp(value, 0, 1); },
+    setFunnel(value, radius = 1) {
+      material.uniforms.throatFunnel.value = THREE.MathUtils.clamp(value, 0, 1);
+      material.uniforms.caveRadius.value = THREE.MathUtils.clamp(radius, 0.05, 1);
+    },
     update(origin, seconds) {
       mouth.position.copy(position).sub(origin);
       // The original camera idles at 0.05 rad/s. Animate the optical view here
@@ -86,6 +90,7 @@ export async function createWorldWormhole(scene, renderer, camera, starMaterial)
         exteriorSource: 'localized-original-sky-halo',
         skyDrift: material.uniforms.skyDrift.value,
         throatFunnel: material.uniforms.throatFunnel.value,
+        caveRadius: material.uniforms.caveRadius.value,
       };
     },
     dispose() {

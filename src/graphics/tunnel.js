@@ -299,6 +299,7 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
     entryRotation: { value: new THREE.Matrix3() },
     entryView: { value: new THREE.Vector3(0, 0, -1) },
     entryFunnel: { value: 1 },
+    entryCaveRadius: { value: 1 },
     entryTravel: { value: 0 },
     entryWalls: { value: 0 },
     entryDetail: { value: 0 },
@@ -357,11 +358,12 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
   const skyBackground = skyBackgroundMaterial ? new THREE.Mesh(entry.geometry, skyBackgroundMaterial) : null;
   if (skyBackground) { skyBackground.frustumCulled = false; skyBackground.renderOrder = -10; scene.add(skyBackground); }
 
-  function setEntry({ camera: source, position: sourcePosition, funnel }) {
+  function setEntry({ camera: source, position: sourcePosition, funnel, caveRadius }) {
     uniforms.entryProjectionInverse.value.copy(source.projectionMatrixInverse);
     uniforms.entryRotation.value.setFromMatrix4(source.matrixWorld);
     uniforms.entryView.value.set(8 - sourcePosition[0], -sourcePosition[1], -40 - sourcePosition[2]).normalize();
     uniforms.entryFunnel.value = funnel;
+    uniforms.entryCaveRadius.value = caveRadius;
   }
 
   // There is no mouth disc any more.

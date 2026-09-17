@@ -2,6 +2,15 @@ const clamp = value => Math.max(0, Math.min(1, value));
 export const TUNNEL_BLEND_START = 6.2;
 export const TUNNEL_BLEND_END = 7.2;
 export const THROAT_FUNNEL_START = 4.0;
+export const CAVE_ENTRY_RADIUS = 0.38;
+
+export function caveRadiusAt(units) {
+  const t = clamp((units - THROAT_FUNNEL_START) / (TUNNEL_BLEND_END - THROAT_FUNNEL_START));
+  // A separate contraction curve keeps tightening through the final approach.
+  // Zero endpoint velocity prevents a snap when the tunnel takes over.
+  const contraction = t * t * t * (t * (t * 6 - 15) + 10);
+  return 1 + (CAVE_ENTRY_RADIUS - 1) * contraction;
+}
 
 export function wormholeApproach(units, aspect = 1881 / 913) {
   const t = clamp(units / TUNNEL_BLEND_END);
@@ -22,5 +31,6 @@ export function wormholeApproach(units, aspect = 1881 / 913) {
   return { position, yaw: -Math.atan2(dx, -dz) + horizontalOffset * framing,
     pitch: Math.atan2(dy, Math.hypot(dx, dz)) - verticalOffset * framing,
     tunnelBlend: blend * blend * (3 - 2 * blend),
+    caveRadius: caveRadiusAt(units),
     throatFunnel: funnel * funnel * (3 - 2 * funnel) };
 }

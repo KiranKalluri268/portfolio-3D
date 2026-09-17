@@ -1,8 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { wormholeApproach, TUNNEL_BLEND_START, TUNNEL_BLEND_END, THROAT_FUNNEL_START } from './wormholeApproach.mjs';
+import { wormholeApproach, TUNNEL_BLEND_START, TUNNEL_BLEND_END, THROAT_FUNNEL_START, caveRadiusAt, CAVE_ENTRY_RADIUS } from './wormholeApproach.mjs';
 
 const distance = position => Math.hypot(position[0] - 8, position[1], position[2] + 40);
+test('cave radius contracts continuously to a finite, reversible handoff', () => {
+  assert.equal(caveRadiusAt(0), 1);
+  assert.equal(caveRadiusAt(THROAT_FUNNEL_START), 1);
+  assert.equal(caveRadiusAt(TUNNEL_BLEND_END), CAVE_ENTRY_RADIUS);
+  assert.equal(caveRadiusAt(9), CAVE_ENTRY_RADIUS);
+  let previous = 1;
+  for (let u = THROAT_FUNNEL_START + .001; u < TUNNEL_BLEND_END; u += .001) {
+    const radius = caveRadiusAt(u);
+    assert.ok(radius < previous && radius > CAVE_ENTRY_RADIUS);
+    assert.ok(previous - radius < .001);
+    assert.equal(wormholeApproach(u).caveRadius, radius);
+    previous = radius;
+  }
+  assert.ok(caveRadiusAt(TUNNEL_BLEND_END - .001) - CAVE_ENTRY_RADIUS < 1e-8);
+  const samples = [4, 5, 6, 6.8, 7.2, 8];
+  assert.deepEqual(samples.map(caveRadiusAt), samples.reverse().map(caveRadiusAt).reverse());
+});
 const speed = units => {
   const a = wormholeApproach(units).position, b = wormholeApproach(units + .001).position;
   return Math.hypot(...b.map((v, i) => v - a[i])) / .001;

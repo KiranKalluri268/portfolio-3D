@@ -36,15 +36,15 @@ vec3 destinationSky(vec3 dir) {
     + starAt(uv + vec2(0, 0.004)) + starAt(uv - vec2(0, 0.004))) * 0.16;
   return sky + texture2D(farNebula, uv).rgb * TINT;
 }
-vec3 funnelSky(vec3 ray, vec3 view, float funnel, float travel) {
+vec3 funnelSky(vec3 ray, vec3 view, float funnel, float travel, float caveRadius) {
   vec3 right = perpendicular(vec3(1, 0, 0), view);
   vec3 up = normalize(cross(right, view));
   vec2 aperture = vec2(dot(ray, right), dot(ray, up)) / max(dot(ray, view), 0.08);
   aperture -= vec2(0.10, -0.055) * funnel;
   float radius = max(length(aperture), 0.012);
-  // Tighten the optical bore by 35% at full morph, without shrinking the
-  // physical mouth or changing the exterior lens. Both scenes share this bend.
-  float boreRadius = mix(1.0, 0.65, funnel);
+  // Scroll controls the optical bore independently of the funnel morph.
+  // The tunnel inherits its final radius; the exterior lens never shrinks.
+  float boreRadius = max(caveRadius, 0.05);
   float depth = log(1.0 + 2.4 / radius);
   float azimuth = atan(aperture.y, aperture.x) + depth * 0.30 * funnel + travel;
   vec3 around = right * cos(azimuth) + up * sin(azimuth);

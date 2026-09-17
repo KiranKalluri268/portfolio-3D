@@ -29,7 +29,7 @@ export async function createConnectedJourney(renderer) {
     tunnelSky: wormhole.sky,
     getTunnelEntry() {
       return { camera: world.camera, position: entryPose.position,
-        funnel: entryPose.throatFunnel };
+        funnel: entryPose.throatFunnel, caveRadius: entryPose.caveRadius };
     },
     setTextures() {},
     setNavigator(callback) { navigate = callback; },
@@ -45,7 +45,7 @@ export async function createConnectedJourney(renderer) {
       world.setDestination(atWormhole ? wormhole : atBlackHole ? blackHole : null);
       if (atWormhole) {
         const approach = wormholeApproach(units, renderer.domElement.clientWidth / renderer.domElement.clientHeight);
-        wormhole.setFunnel(approach.throatFunnel);
+        wormhole.setFunnel(approach.throatFunnel, approach.caveRadius);
         world.update(0, !active, approach);
         active = true;
         panel.dataset.activeScene = 'wormhole';
