@@ -2,6 +2,7 @@ uniform sampler2D farStars;
 uniform sampler2D farNebula;
 uniform float exteriorLensing;
 uniform float skyDrift;
+uniform float throatFunnel;
 uniform vec3 localCamera;
 uniform mat4 localToClip;
 varying vec3 localSurface;
@@ -115,6 +116,27 @@ void main() {
   through = through * cos(twist) + cross(axis, through) * sin(twist)
     + axis * dot(axis, through) * (1.0 - cos(twist));
   vec3 transmitted = destinationSky(normalize(through));
+  if (throatFunnel > 0.0) {
+    // Unwrap the transmitted sky onto a receding funnel. Depth increases
+    // toward the axis, stretching clouds along the walls rather than fading
+    // a flat mouth away. The original curved-ray image remains at zero morph.
+    vec3 right = perpendicular(vec3(1.0, 0.0, 0.0), view);
+    vec3 up = normalize(cross(right, view));
+    float forward = max(dot(ray, view), 0.08);
+    vec2 aperture = vec2(dot(ray, right), dot(ray, up)) / forward;
+    // A small bend carries the vanishing point into the passage.
+    aperture -= vec2(0.10, -0.055) * throatFunnel;
+    float radius = max(length(aperture), 0.012);
+    float depth = log(1.0 + 1.8 / radius);
+    float azimuth = atan(aperture.y, aperture.x) + depth * 0.22 * throatFunnel;
+    vec3 around = right * cos(azimuth) + up * sin(azimuth);
+    // The sampling angle opens toward the walls as the throat lengthens.
+    float wallAngle = 1.45 * (1.0 - exp(-radius * (1.0 + 3.0 * throatFunnel)));
+    vec3 wallRay = view * cos(wallAngle) + around * sin(wallAngle);
+    vec3 wallSky = destinationSky(normalize(wallRay));
+    float wallLight = mix(0.65, 1.15, smoothstep(0.0, 1.0, radius));
+    transmitted = mix(transmitted, wallSky * wallLight, throatFunnel * 0.85);
+  }
   // Put the optical surface at the lens plane so foreground stars stay in
   // front. Ray-path length is not the depth of the apparent throat image.
   float depth = max(0.06, length(localCamera) * max(dot(ray, normalize(-localCamera + vec3(0.000001))), 0.0));

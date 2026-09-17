@@ -11,6 +11,7 @@ export function wormholeApproach(units, aspect = 1881 / 913) {
   const position = [0, 1, 2].map(axis => points.reduce((sum, p, i) => sum + p[axis] * weights[i], 0));
   const dx = 8 - position[0], dy = -position[1], dz = -40 - position[2];
   const blend = clamp((units - TUNNEL_BLEND_START) / (TUNNEL_BLEND_END - TUNNEL_BLEND_START));
+  const funnel = clamp((units - 4.7) / (TUNNEL_BLEND_END - 4.7));
   // Match the reference's upper-right opening, then gradually aim into the
   // mouth. Tracking its center from frame one disguises the sideways flight.
   const framing = 1 - q * q * (3 - 2 * q);
@@ -19,5 +20,6 @@ export function wormholeApproach(units, aspect = 1881 / 913) {
   const verticalOffset = Math.atan(.43 * Math.tan(verticalFov / 2));
   return { position, yaw: -Math.atan2(dx, -dz) + horizontalOffset * framing,
     pitch: Math.atan2(dy, Math.hypot(dx, dz)) - verticalOffset * framing,
-    tunnelBlend: blend * blend * (3 - 2 * blend) };
+    tunnelBlend: blend * blend * (3 - 2 * blend),
+    throatFunnel: funnel * funnel * (3 - 2 * funnel) };
 }

@@ -26,6 +26,7 @@ export async function createWorldWormhole(scene, renderer, camera, starMaterial)
       farNebula: { value: nebula },
       exteriorLensing: { value: 1 },
       skyDrift: { value: 0 },
+      throatFunnel: { value: 0 },
       localCamera: { value: new THREE.Vector3() },
       localToClip: { value: new THREE.Matrix4() },
     },
@@ -52,6 +53,7 @@ export async function createWorldWormhole(scene, renderer, camera, starMaterial)
   return {
     position, horizonRadius: THROAT_RADIUS,
     setVisible(value) { mouth.visible = value; },
+    setFunnel(value) { material.uniforms.throatFunnel.value = THREE.MathUtils.clamp(value, 0, 1); },
     update(origin, seconds) {
       mouth.position.copy(position).sub(origin);
       const dt = lastSeconds === null ? 0 : Math.max(0, Math.min(0.05, seconds - lastSeconds));
@@ -76,6 +78,7 @@ export async function createWorldWormhole(scene, renderer, camera, starMaterial)
         throatSource: 'original-destination-sky',
         exteriorSource: 'localized-original-sky-halo',
         skyDrift: material.uniforms.skyDrift.value,
+        throatFunnel: material.uniforms.throatFunnel.value,
       };
     },
     dispose() {

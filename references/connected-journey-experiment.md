@@ -26,6 +26,12 @@ from this update. Nothing has been ported to `my-portfolio`.
 
 ### Curved approach and lit tunnel blend (2026-09-17)
 
+The throat now begins an inward funnel deformation at unit 4.7, ahead of the
+5.5-6.5 tunnel crossfade. Its destination image stretches toward a slightly
+bent vanishing point, with a gentle depth gradient. The shader deformation is
+scroll-driven and reverses with the approach; standalone wormholes default to
+zero deformation. This is an optical morph, not a change to world geometry.
+
 Opening framing now places the mouth at roughly 73% of viewport width and 29%
 of viewport height, matching the supplied reference. A broader sideways arc
 and gradual centering make the turn visible. The tunnel uses its original

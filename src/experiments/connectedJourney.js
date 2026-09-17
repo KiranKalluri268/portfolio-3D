@@ -36,6 +36,7 @@ export async function createConnectedJourney(renderer) {
       world.setDestination(atWormhole ? wormhole : atBlackHole ? blackHole : null);
       if (atWormhole) {
         const approach = wormholeApproach(units, renderer.domElement.clientWidth / renderer.domElement.clientHeight);
+        wormhole.setFunnel(approach.throatFunnel);
         world.update(0, !active, approach);
         active = true;
         panel.dataset.activeScene = 'wormhole';
