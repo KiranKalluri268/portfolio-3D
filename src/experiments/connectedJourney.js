@@ -21,14 +21,23 @@ export async function createConnectedJourney(renderer) {
   nav.innerHTML = '<button data-unit="0">Wormhole</button><button data-unit="9">Tunnel</button><button data-unit="13">Open space</button><button data-unit="21.25">Fast travel</button><button data-unit="31">Galaxy</button><button data-unit="34">Hyperspace 2</button><button data-unit="40">Black hole</button>';
   panel.appendChild(nav);
   let navigate = () => {}, active = false;
+  let entryPose = wormholeApproach(TUNNEL_BLEND_END);
   nav.addEventListener('click', event => {
     if (event.target.dataset.unit !== undefined) navigate(Number(event.target.dataset.unit));
   });
   return {
+    tunnelSky: wormhole.sky,
+    getTunnelEntry() {
+      return { camera: world.camera, position: entryPose.position,
+        funnel: entryPose.throatFunnel };
+    },
     setTextures() {},
     setNavigator(callback) { navigate = callback; },
     update(units) {
       const atWormhole = units <= TUNNEL_BLEND_END;
+      entryPose = wormholeApproach(Math.min(units, TUNNEL_BLEND_END),
+        renderer.domElement.clientWidth / renderer.domElement.clientHeight);
+      if (!atWormhole) wormhole.advanceSky(performance.now() / 1000);
       const atBlackHole = units > 37;
       wormhole.setVisible(atWormhole);
       blackHole.setVisible(atBlackHole);
@@ -63,7 +72,10 @@ export async function createConnectedJourney(renderer) {
       const next = units > 11.5;
       panel.dataset.activeScene = next ? 'world' : 'tunnel';
       if (!next) {
-        active = false;
+        // Keep the entrance projection responsive to the same look controls.
+        // No destination is rendered here; this only maintains the camera pose.
+        world.update(0, !active, entryPose);
+        active = true;
         const stage = 'Inside the tunnel';
         panel.querySelector('[data-status]').textContent = stage;
         const label = document.querySelector('.guided-stage');

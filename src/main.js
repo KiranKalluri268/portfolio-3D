@@ -14,6 +14,7 @@ import { resolveSkyLayers, resolveStarGain } from './skyLayers';
 import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
 import { createSceneBlend } from './experiments/sceneBlend.js';
 import { TUNNEL_BLEND_START } from './experiments/wormholeApproach.mjs';
+import { tunnelEntryAt } from './graphics/tunnelEntry.mjs';
 
 
 (async () => {
@@ -398,9 +399,9 @@ import { TUNNEL_BLEND_START } from './experiments/wormholeApproach.mjs';
 
   // The passage between the two worlds. Rendered through the same composer, so
   // it inherits bloom without a second post-processing chain.
-  const { tunnelScene, tunnelCamera, updateTunnel, resizeTunnel, disposeTunnel, setTunnelTextures } =
+  const { tunnelScene, tunnelCamera, updateTunnel, resizeTunnel, disposeTunnel, setTunnelTextures, setTunnelEntry } =
     createTunnel(window.innerWidth / window.innerHeight, connectedJourney
-      ? { radius: 4.8, entryRadius: 2, entryFov: 70 }
+      ? { radius: 4.8, entryRadius: 2, entryFov: 70, sky: travel.tunnelSky }
       : {});
   let tunnelActive = false;
   const tunnelBlend = connectedJourney ? createSceneBlend(renderer) : null;
@@ -1002,6 +1003,7 @@ import { TUNNEL_BLEND_START } from './experiments/wormholeApproach.mjs';
     }
 
     galaxyFrame = travel?.update(routeViewportUnits) ?? null;
+    if (connectedJourney) setTunnelEntry(travel.getTunnelEntry());
     if (galaxyFrame) {
       // The original crossing, flash and tunnel above run untouched. Beyond the
       // tunnel, the timeline selects raster destinations instead of the fall.
@@ -1020,6 +1022,12 @@ import { TUNNEL_BLEND_START } from './experiments/wormholeApproach.mjs';
       if (galaxyFrame.tunnelBlend > 0) {
         bloomPass.strength = 0.9; bloomPass.radius = 1.0; bloomPass.threshold = 0.55;
       }
+    }
+    if (connectedJourney && routeViewportUnits >= TUNNEL_BLEND_START && routeViewportUnits <= 11.5) {
+      const entry = tunnelEntryAt((routeViewportUnits - TUNNEL_BLEND_START) / (11.5 - TUNNEL_BLEND_START));
+      bloomPass.strength = 0.9 * entry.bloom;
+      bloomPass.radius = 1.0;
+      bloomPass.threshold = 0.55;
     }
 
     // slowly revolve particles around the BH when toggle is on

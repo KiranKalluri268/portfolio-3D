@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import fragmentShader from './worldWormhole.glsl?raw';
+import destinationSky from '../graphics/destinationSky.glsl?raw';
 import starUrl from '../../assets/star_noise-generated.png';
 import nebulaUrl from '../../assets/milkyway-preview.jpg';
 
@@ -35,7 +36,7 @@ export async function createWorldWormhole(scene, renderer, camera, starMaterial)
         localSurface = position;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }`,
-    fragmentShader,
+    fragmentShader: fragmentShader.replace('// DESTINATION_SKY', destinationSky),
   });
   const mouth = new THREE.Mesh(new THREE.SphereGeometry(18, 48, 32), material);
   mouth.scale.setScalar(THROAT_RADIUS);
@@ -49,19 +50,25 @@ export async function createWorldWormhole(scene, renderer, camera, starMaterial)
   scene.add(mouth);
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let lastSeconds = null;
+  function advanceSky(seconds) {
+    const dt = lastSeconds === null ? 0 : Math.max(0, Math.min(0.05, seconds - lastSeconds));
+    lastSeconds = seconds;
+    if (!reducedMotion.matches) material.uniforms.skyDrift.value =
+      (material.uniforms.skyDrift.value + dt * 0.05) % (Math.PI * 2);
+  }
 
   return {
     position, horizonRadius: THROAT_RADIUS,
+    sky: { farStars: material.uniforms.farStars, farNebula: material.uniforms.farNebula,
+      skyDrift: material.uniforms.skyDrift },
+    advanceSky,
     setVisible(value) { mouth.visible = value; },
     setFunnel(value) { material.uniforms.throatFunnel.value = THREE.MathUtils.clamp(value, 0, 1); },
     update(origin, seconds) {
       mouth.position.copy(position).sub(origin);
-      const dt = lastSeconds === null ? 0 : Math.max(0, Math.min(0.05, seconds - lastSeconds));
-      lastSeconds = seconds;
       // The original camera idles at 0.05 rad/s. Animate the optical view here
       // to preserve that pace without moving the free-flight camera or stars.
-      if (!reducedMotion.matches) material.uniforms.skyDrift.value =
-        (material.uniforms.skyDrift.value + dt * 0.05) % (Math.PI * 2);
+      advanceSky(seconds);
     },
     render() {
       material.uniforms.exteriorLensing.value = starMaterial.uniforms.lensRadius.value > 0 ? 1 : 0;

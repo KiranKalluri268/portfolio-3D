@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import destinationSky from './destinationSky.glsl?raw';
+import entryShader from './tunnelEntry.glsl?raw';
+import { tunnelEntryAt, ENTRY_HANDOFF } from './tunnelEntry.mjs';
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
@@ -35,6 +38,7 @@ const TUNNEL_PATH = [
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
   varying vec3 vWorldPos;
+  varying vec4 vClip;
   void main() {
     // TubeGeometry lays its UVs out the other way up from the CylinderGeometry
     // this used to be: u runs ALONG the tube and v around it, and u starts at 0
@@ -45,6 +49,7 @@ const vertexShader = /* glsl */ `
     vec4 world = modelMatrix * vec4(position, 1.0);
     vWorldPos = world.xyz;
     gl_Position = projectionMatrix * viewMatrix * world;
+    vClip = gl_Position;
   }
 `;
 
@@ -54,6 +59,11 @@ const vertexShader = /* glsl */ `
 const fragmentShader = /* glsl */ `
   varying vec2 vUv;
   varying vec3 vWorldPos;
+  varying vec4 vClip;
+  #ifdef CONNECTED_SKY
+  ${destinationSky}
+  ${entryShader}
+  #endif
 
   uniform sampler2D uStarTex;
   uniform sampler2D uBgTex;
@@ -222,11 +232,27 @@ const fragmentShader = /* glsl */ `
     // place the light is coming from.
     color = mix(color, uExitLight, smoothstep(0.86, 1.0, toExit));
 
+    #ifdef CONNECTED_SKY
+    // Start with precisely the throat's projection. Only after the handoff do
+    // the same clouds wrap around the physical passage and reveal its bends.
+    float azimuth = vUv.x * 2.0 * PI + entryTravel;
+    float latitude = sin(vUv.y * 1.5 * PI - entryTravel * 0.08) * 1.3;
+    vec3 wallDirection = vec3(cos(latitude) * cos(azimuth), sin(latitude),
+      cos(latitude) * sin(azimuth));
+    vec3 clouds = mix(entrySky(vClip.xy / vClip.w), destinationSky(wallDirection), entryDetail);
+    vec3 cloudWall = clouds * mix(1.0, 0.85 + wall * 0.35, entryDetail);
+    // Surface relief is secondary to the transmitted world, not an orange coat.
+    cloudWall += vec3(0.065, 0.075, 0.09) * wall * entryDetail;
+    cloudWall = mix(cloudWall, entrySky(vClip.xy / vClip.w), smoothstep(0.86, 1.0, toExit));
+    float arrival = smoothstep(0.2, 1.0, uExitGlow);
+    color = mix(cloudWall, color, arrival);
+    #endif
+
     gl_FragColor = vec4(color * uReveal, 1.0);
   }
 `;
 
-export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius = radius, entryFov = 78 } = {}) {
+export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius = radius, entryFov = 78, sky = null } = {}) {
   const scene = new THREE.Scene();
 
   // What fills the aperture at the far end. The tube is closed all the way
@@ -267,6 +293,14 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
   }
 
   const uniforms = {
+    ...(sky ?? {}),
+    entryProjectionInverse: { value: new THREE.Matrix4() },
+    entryRotation: { value: new THREE.Matrix3() },
+    entryView: { value: new THREE.Vector3(0, 0, -1) },
+    entryFunnel: { value: 1 },
+    entryTravel: { value: 0 },
+    entryWalls: { value: 0 },
+    entryDetail: { value: 0 },
     uStarTex: { value: null },
     uBgTex: { value: null },
     uSkyAmount: { value: 1.0 },
@@ -284,6 +318,7 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
   };
 
   const material = new THREE.ShaderMaterial({
+    defines: sky ? { CONNECTED_SKY: 1 } : {},
     uniforms,
     vertexShader,
     fragmentShader,
@@ -299,6 +334,33 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
 
   const walls = new THREE.Mesh(geometry, material);
   scene.add(walls);
+  // Full-frame optical continuation also covers the distant opening. It fades
+  // onto identically mapped walls only after the wormhole render has retired.
+  const entryMaterial = sky ? new THREE.ShaderMaterial({
+    uniforms, transparent: true, depthTest: false, depthWrite: false,
+    vertexShader: 'varying vec2 ndc; void main(){ ndc = position.xy; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: `${destinationSky}\n${entryShader}\nvarying vec2 ndc;
+      void main(){ gl_FragColor = vec4(entrySky(ndc), 1.0 - entryWalls); }`,
+  }) : null;
+  const entry = entryMaterial ? new THREE.Mesh(new THREE.PlaneGeometry(2, 2), entryMaterial) : null;
+  if (entry) { entry.frustumCulled = false; entry.renderOrder = 10; scene.add(entry); }
+  const skyBackgroundMaterial = sky ? new THREE.ShaderMaterial({
+    uniforms, depthTest: false, depthWrite: false,
+    vertexShader: entryMaterial.vertexShader,
+    fragmentShader: `${destinationSky}\n${entryShader}\nvarying vec2 ndc;
+      uniform vec3 uExitLight; uniform float uExitGlow;
+      void main(){ gl_FragColor = vec4(mix(entrySky(ndc), uExitLight,
+        smoothstep(0.2, 1.0, uExitGlow)), 1.0); }`,
+  }) : null;
+  const skyBackground = skyBackgroundMaterial ? new THREE.Mesh(entry.geometry, skyBackgroundMaterial) : null;
+  if (skyBackground) { skyBackground.frustumCulled = false; skyBackground.renderOrder = -10; scene.add(skyBackground); }
+
+  function setEntry({ camera: source, position: sourcePosition, funnel }) {
+    uniforms.entryProjectionInverse.value.copy(source.projectionMatrixInverse);
+    uniforms.entryRotation.value.setFromMatrix4(source.matrixWorld);
+    uniforms.entryView.value.set(8 - sourcePosition[0], -sourcePosition[1], -40 - sourcePosition[2]).normalize();
+    uniforms.entryFunnel.value = funnel;
+  }
 
   // There is no mouth disc any more.
   //
@@ -329,7 +391,14 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
    */
   function update(progress, reveal, elapsed) {
     const eased = progress * progress * (3.0 - 2.0 * progress);
-    const entryRelease = THREE.MathUtils.smoothstep(progress, 0, 0.22);
+    const optical = tunnelEntryAt(progress);
+    const entryRelease = sky ? optical.walls : THREE.MathUtils.smoothstep(progress, 0, 0.22);
+    if (sky) {
+      uniforms.entryWalls.value = optical.walls;
+      uniforms.entryDetail.value = optical.detail;
+      uniforms.entryTravel.value = optical.travel;
+      entry.visible = optical.walls < 1;
+    }
     const fov = THREE.MathUtils.lerp(entryFov, 78, entryRelease);
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
     const drift = entryRadius === radius ? 1 : entryRelease;
@@ -337,7 +406,9 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
     // Position and heading both come off the curve now. The camera is placed on
     // it and aimed a little further down it, so it banks into the turns instead
     // of sliding through them facing one fixed direction.
-    const t = TRAVEL_START + eased * (TRAVEL_END - TRAVEL_START);
+    const flightProgress = sky ? THREE.MathUtils.clamp((progress - ENTRY_HANDOFF) / (1 - ENTRY_HANDOFF), 0, 1) : progress;
+    const flightEase = flightProgress * flightProgress * (3 - 2 * flightProgress);
+    const t = TRAVEL_START + flightEase * (TRAVEL_END - TRAVEL_START);
     curve.getPointAt(t, position);
     curve.getTangentAt(t, tangent);
 
@@ -402,9 +473,12 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
   function dispose() {
     geometry.dispose();
     material.dispose();
+    entry?.geometry.dispose();
+    entryMaterial?.dispose();
+    skyBackgroundMaterial?.dispose();
     ownedTextures.forEach((t) => t.dispose());
     ownedTextures = [];
   }
 
-  return { tunnelScene: scene, tunnelCamera: camera, updateTunnel: update, resizeTunnel: resize, disposeTunnel: dispose, setTunnelTextures: setTextures };
+  return { tunnelScene: scene, tunnelCamera: camera, updateTunnel: update, resizeTunnel: resize, disposeTunnel: dispose, setTunnelTextures: setTextures, setTunnelEntry: setEntry };
 }
