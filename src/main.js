@@ -399,7 +399,9 @@ import { TUNNEL_BLEND_START } from './experiments/wormholeApproach.mjs';
   // The passage between the two worlds. Rendered through the same composer, so
   // it inherits bloom without a second post-processing chain.
   const { tunnelScene, tunnelCamera, updateTunnel, resizeTunnel, disposeTunnel, setTunnelTextures } =
-    createTunnel(window.innerWidth / window.innerHeight, { radius: connectedJourney ? 4.8 : 3.2 });
+    createTunnel(window.innerWidth / window.innerHeight, connectedJourney
+      ? { radius: 4.8, entryRadius: 2, entryFov: 70 }
+      : {});
   let tunnelActive = false;
   const tunnelBlend = connectedJourney ? createSceneBlend(renderer) : null;
 

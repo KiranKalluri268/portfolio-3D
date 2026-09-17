@@ -226,7 +226,7 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
-export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS } = {}) {
+export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius = radius, entryFov = 78 } = {}) {
   const scene = new THREE.Scene();
 
   // What fills the aperture at the far end. The tube is closed all the way
@@ -247,6 +247,24 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS } = {}) {
   // Enough tubular segments that the bends are smooth at this length — the wall
   // is only ever a few units from the camera, so faceting shows.
   const geometry = new THREE.TubeGeometry(curve, 400, radius, 48, false);
+  // Match the wormhole's physical mouth, then flare into the wider passage.
+  // Scale each ring about its own curve center, preserving the curved path.
+  if (entryRadius !== radius) {
+    const positions = geometry.attributes.position;
+    const uv = geometry.attributes.uv;
+    const center = new THREE.Vector3();
+    const vertex = new THREE.Vector3();
+    for (let i = 0; i < positions.count; i++) {
+      const u = uv.getX(i);
+      const ramp = THREE.MathUtils.smoothstep(u, TRAVEL_START, 0.2);
+      const ringRadius = THREE.MathUtils.lerp(entryRadius, radius, ramp);
+      curve.getPointAt(u, center);
+      vertex.fromBufferAttribute(positions, i).sub(center).multiplyScalar(ringRadius / radius).add(center);
+      positions.setXYZ(i, vertex.x, vertex.y, vertex.z);
+    }
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals(); geometry.computeBoundingSphere();
+  }
 
   const uniforms = {
     uStarTex: { value: null },
@@ -311,6 +329,10 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS } = {}) {
    */
   function update(progress, reveal, elapsed) {
     const eased = progress * progress * (3.0 - 2.0 * progress);
+    const entryRelease = THREE.MathUtils.smoothstep(progress, 0, 0.22);
+    const fov = THREE.MathUtils.lerp(entryFov, 78, entryRelease);
+    if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    const drift = entryRadius === radius ? 1 : entryRelease;
 
     // Position and heading both come off the curve now. The camera is placed on
     // it and aimed a little further down it, so it banks into the turns instead
@@ -328,14 +350,14 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS } = {}) {
     // A little unsteadiness so it reads as piloted rather than railed. Applied
     // along the frame rather than in world axes: on a bend, a world-space nudge
     // pushes the camera toward the wall instead of away from the centre line.
-    position.addScaledVector(right, Math.sin(elapsed * 0.31) * 0.16);
-    position.addScaledVector(frameUp, Math.cos(elapsed * 0.24) * 0.13);
+    position.addScaledVector(right, Math.sin(elapsed * 0.31) * 0.16 * drift);
+    position.addScaledVector(frameUp, Math.cos(elapsed * 0.24) * 0.13 * drift);
     camera.position.copy(position);
 
     curve.getPointAt(Math.min(t + 0.02, 1), lookTarget);
     camera.up.copy(frameUp);
     camera.lookAt(lookTarget);
-    camera.rotateZ(Math.sin(elapsed * 0.19) * 0.035);
+    camera.rotateZ(Math.sin(elapsed * 0.19) * 0.035 * drift);
 
     uniforms.uFlow.value = eased * 46 + elapsed * 0.6;
     uniforms.uReveal.value = reveal;

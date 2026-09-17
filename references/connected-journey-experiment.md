@@ -26,6 +26,12 @@ from this update. Nothing has been ported to `my-portfolio`.
 
 ### Curved approach and lit tunnel blend (2026-09-17)
 
+Latest timing: the blend runs at units 6.2-7.2 (0.7 viewports later). Earlier
+5.5-6.5 timings below are superseded. The connected tunnel starts at radius 2
+and FOV 70 to match the wormhole mouth and camera, then flares to radius 4.8
+and FOV 78. Entry drift and roll ease in after the handoff begins. Geometry
+and projection are matched as a starting point; appearance awaits user review.
+
 The throat now begins an inward funnel deformation at unit 4.7, ahead of the
 5.5-6.5 tunnel crossfade. Its destination image stretches toward a slightly
 bent vanishing point, with a gentle depth gradient. The shader deformation is

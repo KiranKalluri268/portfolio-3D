@@ -2,7 +2,7 @@ import { createFreeWorld } from './freeWorld.js';
 import { departureAt, blackHoleProgress } from './galaxyDeparture.mjs';
 import { createWorldWormhole } from './worldWormhole.js';
 import { createWorldBlackHole } from './worldBlackHole.js';
-import { wormholeApproach } from './wormholeApproach.mjs';
+import { wormholeApproach, TUNNEL_BLEND_END } from './wormholeApproach.mjs';
 import './connectedJourney.css';
 
 export async function createConnectedJourney(renderer) {
@@ -28,7 +28,7 @@ export async function createConnectedJourney(renderer) {
     setTextures() {},
     setNavigator(callback) { navigate = callback; },
     update(units) {
-      const atWormhole = units <= 6.5;
+      const atWormhole = units <= TUNNEL_BLEND_END;
       const atBlackHole = units > 37;
       wormhole.setVisible(atWormhole);
       blackHole.setVisible(atBlackHole);
@@ -61,10 +61,10 @@ export async function createConnectedJourney(renderer) {
           state: { veil: 1 - Math.min(1, (units - 37) / 0.65), streak: 0 } };
       }
       const next = units > 11.5;
-      panel.dataset.activeScene = next ? 'world' : units > 6.5 ? 'tunnel' : 'wormhole';
+      panel.dataset.activeScene = next ? 'world' : 'tunnel';
       if (!next) {
         active = false;
-        const stage = units > 6.5 ? 'Inside the tunnel' : 'Wormhole approach';
+        const stage = 'Inside the tunnel';
         panel.querySelector('[data-status]').textContent = stage;
         const label = document.querySelector('.guided-stage');
         if (label) label.textContent = stage;

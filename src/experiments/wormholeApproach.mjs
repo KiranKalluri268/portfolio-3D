@@ -1,6 +1,6 @@
 const clamp = value => Math.max(0, Math.min(1, value));
-export const TUNNEL_BLEND_START = 5.5;
-export const TUNNEL_BLEND_END = 6.5;
+export const TUNNEL_BLEND_START = 6.2;
+export const TUNNEL_BLEND_END = 7.2;
 
 export function wormholeApproach(units, aspect = 1881 / 913) {
   const t = clamp(units / TUNNEL_BLEND_END);
