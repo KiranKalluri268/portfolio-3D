@@ -102,18 +102,18 @@ void main() {
     gl_FragDepthEXT = 1.0;
     return;
   }
+  // Use the integrated ray's final direction so the far-side clouds stretch
+  // and wind through the throat. Color grading is independent of this mapping.
+  vec3 vdir = normalize(velocity);
+  float bend = acos(clamp(dot(ray, vdir), -1.0, 1.0));
+  float compressed = 0.3 * log(1.0 + bend / 0.3);
+  vec3 through = normalize(mix(ray, vdir, bend > 0.0001 ? compressed / bend : 1.0));
   vec3 view = length(localCamera) > 0.00001 ? normalize(-localCamera) : ray;
-  // The integrator still decides which rays enter the throat. Inside it, a
-  // monotonic angular map shows each region of the destination once instead
-  // of folding the terminal velocity's repeated windings into nested rings.
-  // This is an artistic portal mapping, not a second spacetime integration.
-  float aperture = max(2.598, length(localCamera) * 0.2);
-  float radial = clamp(length(cross(localCamera, ray)) / aperture, 0.0, 1.0);
-  vec3 tangent = ray - view * dot(ray, view);
-  vec3 outward = dot(tangent, tangent) > 0.000001 ? normalize(tangent)
-    : perpendicular(vec3(0.35, 0.82, 0.45), view);
-  float angle = radial * (1.15 + 0.25 * radial * radial);
-  vec3 through = view * cos(angle) + outward * sin(angle);
+  vec3 axis = perpendicular(normalize(vec3(0.35, 0.82, 0.45)), view);
+  float e = exp(-2.0 * bend / 0.3);
+  float twist = 1.5 * (1.0 - e) / (1.0 + e);
+  through = through * cos(twist) + cross(axis, through) * sin(twist)
+    + axis * dot(axis, through) * (1.0 - cos(twist));
   vec3 transmitted = destinationSky(normalize(through));
   // Put the optical surface at the lens plane so foreground stars stay in
   // front. Ray-path length is not the depth of the apparent throat image.

@@ -7,9 +7,11 @@ The throat samples the original destination sky: encoded stars from
 `star_noise-generated.png` and `milkyway-preview.jpg`. The September 17 revision
 uses neutral grading, star gain 0.12 and nebula gain 1.0. The extra warm floor
 and procedural galaxy band have been removed so the image's clouds and dust
-lanes define the interior. A monotonic angular portal mapping replaces the
-terminal-ray twist, avoiding repeated windings and concentric star rings.
-The curved-ray integrator still defines the throat boundary. Escaped rays near the mouth
+lanes define the interior. The integrated ray direction, logarithmic bend
+compression and axis twist drive the transmitted view, preserving the strong
+stretching and winding through the throat. A simpler angular portal mapping
+was removed because it flattened the distortion into a plain window.
+The curved-ray integrator also defines the throat boundary. Escaped rays near the mouth
 sample the original exterior star/nebula sky along the curved ray. This halo
 fades between impact parameters 4.5 and 8 throat radii; beyond it rays discard
 and expose the live world. The halo writes far depth so resident stars keep
@@ -28,7 +30,7 @@ captures. Its textures are disposed with the destination.
 Limits: the far-side sky is a distant angular image, not a nearby 3D destination.
 The halo is a localized textured-sky approximation, not a curved-ray lookup of
 the resident stars. The exterior stars use the LAB 06 thin-lens approximation; the throat uses the
-bounded curved-ray integrator for the silhouette and an artistic angular map
+bounded curved-ray integrator with artistic bend compression and twist
 for the transmitted view. The standalone camera can pass the mouth but does
 not teleport. Both `/` and `/?world=wormhole` use this shared destination shader;
 the connected journey transitions into its existing tunnel.
