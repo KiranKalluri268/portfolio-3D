@@ -3,10 +3,13 @@
 Open `/?world=wormhole`. Uses the same resident stars, floating origin,
 movement controls and finite-distance exterior star lensing as LAB 06.
 
-The throat alone samples the original `/` destination sky: encoded stars from
-`star_noise-generated.png`, `milkyway-preview.jpg`, and the procedural galaxy
-band. The original throat rotation, tint, gains, blur, bend compression and
-twist are reproduced in `worldWormhole.glsl`. Escaped rays near the mouth now
+The throat samples the original destination sky: encoded stars from
+`star_noise-generated.png` and `milkyway-preview.jpg`. The September 17 revision
+uses neutral grading, star gain 0.12 and nebula gain 1.0. The extra warm floor
+and procedural galaxy band have been removed so the image's clouds and dust
+lanes define the interior. A monotonic angular portal mapping replaces the
+terminal-ray twist, avoiding repeated windings and concentric star rings.
+The curved-ray integrator still defines the throat boundary. Escaped rays near the mouth
 sample the original exterior star/nebula sky along the curved ray. This halo
 fades between impact parameters 4.5 and 8 throat radii; beyond it rays discard
 and expose the live world. The halo writes far depth so resident stars keep
@@ -25,7 +28,9 @@ captures. Its textures are disposed with the destination.
 Limits: the far-side sky is a distant angular image, not a nearby 3D destination.
 The halo is a localized textured-sky approximation, not a curved-ray lookup of
 the resident stars. The exterior stars use the LAB 06 thin-lens approximation; the throat uses the
-bounded curved-ray integrator. The camera can pass the mouth but does not yet
-transition into the tunnel or teleport. The connected journey is unchanged.
+bounded curved-ray integrator for the silhouette and an artistic angular map
+for the transmitted view. The standalone camera can pass the mouth but does
+not teleport. Both `/` and `/?world=wormhole` use this shared destination shader;
+the connected journey transitions into its existing tunnel.
 
 Check: `node scripts/check-world-wormhole-browser.mjs`.

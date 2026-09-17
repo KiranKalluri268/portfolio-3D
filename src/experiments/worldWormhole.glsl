@@ -10,7 +10,7 @@ varying vec3 localSurface;
 // Crossing rays see the far side. Escaping rays near the rim show the original
 // curved sky halo, fading into the resident world outside the lens region.
 const float PI = 3.141592653589793;
-const vec3 TINT = vec3(1.0, 0.66, 0.44);
+const vec3 TINT = vec3(0.94, 0.97, 1.0);
 vec3 driftSky(vec3 direction) {
   float c = cos(skyDrift), s = sin(skyDrift);
   return vec3(c*direction.x + s*direction.z, direction.y, -s*direction.x + c*direction.z);
@@ -28,7 +28,7 @@ vec3 skyStar(vec2 uv, vec3 tint, float gain) {
   return clamp(color / 255.0, 0.0, 1.0) * tint * star.g * gain;
 }
 vec3 starAt(vec2 uv) {
-  return skyStar(uv, TINT, 0.35);
+  return skyStar(uv, TINT, 0.12);
 }
 vec3 exteriorSky(vec3 dir) {
   dir = driftSky(dir);
@@ -45,11 +45,10 @@ vec3 perpendicular(vec3 pole, vec3 view) {
   if (dot(p, p) < 0.000001) p = cross(view, abs(view.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0));
   return normalize(p);
 }
-vec3 destinationSky(vec3 dir, vec3 view) {
+vec3 destinationSky(vec3 dir) {
   dir = driftSky(dir);
-  view = driftSky(view);
-  // Same rotation, temperature decoding, five-tap star blur, tint and gains
-  // as the original '/' throat. No image is sampled for an escaped ray.
+  // Preserve cloud structure and dust lanes in the far-side image. Neutral
+  // grading and restrained stars keep the view from becoming orange speckles.
   float angle = 40.0 * PI / 180.0;
   vec3 rotated = vec3(cos(angle)*dir.x - sin(angle)*dir.y,
     sin(angle)*dir.x + cos(angle)*dir.y, dir.z);
@@ -57,17 +56,8 @@ vec3 destinationSky(vec3 dir, vec3 view) {
   vec3 sky = starAt(uv) * 0.36;
   sky += (starAt(uv + vec2(0.004, 0)) + starAt(uv - vec2(0.004, 0))
     + starAt(uv + vec2(0, 0.004)) + starAt(uv - vec2(0, 0.004))) * 0.16;
-  sky += mix(vec3(0.020, 0.009, 0.007), vec3(0.006, 0.002, 0.002), smoothstep(0.0, 0.55, abs(dir.y)));
-  sky += texture2D(farNebula, uv).rgb * 1.6 * TINT;
-  vec3 pole = perpendicular(normalize(vec3(0.30, 0.88, -0.37)), view);
-  float lat = dot(dir, pole);
-  vec3 core = normalize(view + 0.45 * cross(pole, view));
-  float lon = atan(dot(dir, cross(pole, core)), dot(dir, core));
-  float belt = exp(-lat*lat / 0.0121);
-  float bulge = exp(-lon*lon / 0.9) * exp(-lat*lat / 0.0484);
-  float mottle = 0.72 + 0.28*sin(lon*2.0 + 0.9) + 0.16*sin(lon*3.0 - 2.1);
-  float lane = 1.0 - 0.92 * exp(-lat*lat / 0.00121);
-  return sky + vec3(0.075, 0.050, 0.034) * (belt*mottle*lane + bulge*1.6);
+  sky += texture2D(farNebula, uv).rgb * TINT;
+  return sky;
 }
 vec3 acceleration(vec3 p, float h2) {
   float r2 = max(dot(p, p), 0.01);
@@ -112,17 +102,19 @@ void main() {
     gl_FragDepthEXT = 1.0;
     return;
   }
-  vec3 vdir = normalize(velocity);
-  float bend = acos(clamp(dot(ray, vdir), -1.0, 1.0));
-  float compressed = 0.3 * log(1.0 + bend / 0.3);
-  vec3 through = normalize(mix(ray, vdir, bend > 0.0001 ? compressed / bend : 1.0));
   vec3 view = length(localCamera) > 0.00001 ? normalize(-localCamera) : ray;
-  vec3 axis = perpendicular(normalize(vec3(0.35, 0.82, 0.45)), view);
-  float e = exp(-2.0 * bend / 0.3);
-  float twist = 1.5 * (1.0 - e) / (1.0 + e);
-  through = through * cos(twist) + cross(axis, through) * sin(twist)
-    + axis * dot(axis, through) * (1.0 - cos(twist));
-  vec3 transmitted = destinationSky(normalize(through), view);
+  // The integrator still decides which rays enter the throat. Inside it, a
+  // monotonic angular map shows each region of the destination once instead
+  // of folding the terminal velocity's repeated windings into nested rings.
+  // This is an artistic portal mapping, not a second spacetime integration.
+  float aperture = max(2.598, length(localCamera) * 0.2);
+  float radial = clamp(length(cross(localCamera, ray)) / aperture, 0.0, 1.0);
+  vec3 tangent = ray - view * dot(ray, view);
+  vec3 outward = dot(tangent, tangent) > 0.000001 ? normalize(tangent)
+    : perpendicular(vec3(0.35, 0.82, 0.45), view);
+  float angle = radial * (1.15 + 0.25 * radial * radial);
+  vec3 through = view * cos(angle) + outward * sin(angle);
+  vec3 transmitted = destinationSky(normalize(through));
   // Put the optical surface at the lens plane so foreground stars stay in
   // front. Ray-path length is not the depth of the apparent throat image.
   float depth = max(0.06, length(localCamera) * max(dot(ray, normalize(-localCamera + vec3(0.000001))), 0.0));
