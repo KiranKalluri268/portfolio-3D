@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { wormholeApproach, TUNNEL_BLEND_START, TUNNEL_BLEND_END, THROAT_FUNNEL_START, caveRadiusAt, CAVE_ENTRY_RADIUS } from './wormholeApproach.mjs';
+import { wormholeApproach, TUNNEL_BLEND_START, TUNNEL_BLEND_END, TUNNEL_VISUAL_HANDOFF, THROAT_FUNNEL_START, caveRadiusAt, CAVE_ENTRY_RADIUS } from './wormholeApproach.mjs';
 
 const distance = position => Math.hypot(position[0] - 8, position[1], position[2] + 40);
 test('cave radius contracts continuously to a finite, reversible handoff', () => {
@@ -41,7 +41,9 @@ test('approach curves from a distant view into the throat and brakes near entry'
 });
 test('blend is bounded and reversible, with exact endpoints', () => {
   assert.equal(wormholeApproach(TUNNEL_BLEND_START).tunnelBlend, 0);
-  assert.equal(wormholeApproach((TUNNEL_BLEND_START + TUNNEL_BLEND_END) / 2).tunnelBlend, .5);
+  assert.equal(wormholeApproach((TUNNEL_BLEND_START + TUNNEL_VISUAL_HANDOFF) / 2).tunnelBlend, .5);
+  assert.equal(wormholeApproach(TUNNEL_VISUAL_HANDOFF).tunnelBlend, 1);
+  assert.equal(wormholeApproach(6.7).tunnelBlend, 1, 'no wormhole bleed after the quick handoff');
   assert.equal(wormholeApproach(TUNNEL_BLEND_END).tunnelBlend, 1);
   assert.equal(wormholeApproach(THROAT_FUNNEL_START).throatFunnel, 0);
   assert.ok(wormholeApproach(4.7).throatFunnel > .1, 'cave forms before the previous onset');
