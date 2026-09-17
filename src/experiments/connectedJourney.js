@@ -35,7 +35,7 @@ export async function createConnectedJourney(renderer) {
       world.setGalaxyVisible(units > 11.5);
       world.setDestination(atWormhole ? wormhole : atBlackHole ? blackHole : null);
       if (atWormhole) {
-        const approach = wormholeApproach(units);
+        const approach = wormholeApproach(units, renderer.domElement.clientWidth / renderer.domElement.clientHeight);
         world.update(0, !active, approach);
         active = true;
         panel.dataset.activeScene = 'wormhole';

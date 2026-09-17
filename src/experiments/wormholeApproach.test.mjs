@@ -28,6 +28,6 @@ test('blend is bounded and reversible, with exact endpoints', () => {
   assert.equal(wormholeApproach(6.5).tunnelBlend, 1);
   assert.deepEqual(wormholeApproach(-2), wormholeApproach(0));
   assert.deepEqual(wormholeApproach(9), wormholeApproach(6.5));
-  const forward = [5.5, 6, 6.5].map(wormholeApproach);
-  assert.deepEqual([6.5, 6, 5.5].map(wormholeApproach).reverse(), forward);
+  const forward = [5.5, 6, 6.5].map(u => wormholeApproach(u));
+  assert.deepEqual([6.5, 6, 5.5].map(u => wormholeApproach(u)).reverse(), forward);
 });
