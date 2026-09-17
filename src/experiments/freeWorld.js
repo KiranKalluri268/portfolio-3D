@@ -311,7 +311,11 @@ function update(now, progress, positionOverride) {
     worldPosition.set(...pose.position);
     yaw = pose.yaw; pitch = pose.pitch;
   }
-  if (positionOverride) worldPosition.set(...positionOverride);
+  if (positionOverride) {
+    worldPosition.set(...(positionOverride.position ?? positionOverride));
+    yaw += positionOverride.yaw ?? 0;
+    pitch += positionOverride.pitch ?? 0;
+  }
   updateCells();
   guided?.place(renderOrigin);
   destination?.update(renderOrigin, now / 1000);

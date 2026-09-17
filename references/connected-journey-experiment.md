@@ -24,6 +24,36 @@ from this update. Nothing has been ported to `my-portfolio`.
 
 ## Live-world destination integration (2026-09-16)
 
+### Curved approach and lit tunnel blend (2026-09-17)
+
+The opening now starts about 145 world units from the mouth and follows a cubic
+curve, aimed toward the wormhole. The integrated speed profile accelerates
+gently then brakes near entry; the camera ends 0.9 units from the center.
+`wormholeApproach.mjs` owns the reversible position, heading and blend timing.
+
+Units 5.5-6.5 crossfade the live wormhole render into the fully revealed tunnel.
+Both scenes render only during that overlap. The tunnel progresses from unit
+5.5 to its existing exit at 11.5. The opening flash, black veil and blackout
+message are disabled for the connected route. The exit veil remains in use.
+The original `?world=old` transition remains available unchanged.
+
+Build and path tests pass; browser appearance awaits user review.
+
+### Curved approach and lit tunnel blend (2026-09-17)
+
+The opening now starts about 145 world units from the mouth and follows a cubic
+curve, aimed toward the wormhole. The integrated speed profile accelerates
+gently then brakes near entry; the camera ends 0.9 units from the center.
+`wormholeApproach.mjs` owns the reversible position, heading and blend timing.
+
+Units 5.5-6.5 crossfade the live wormhole render into the fully revealed tunnel.
+Both scenes render only during that overlap. The tunnel progresses from unit
+5.5 to its existing exit at 11.5. The opening flash, black veil and blackout
+message are disabled for the connected route. The exit veil remains in use.
+The original `?world=old` transition remains available unchanged.
+
+Build and path tests pass; browser appearance awaits user review.
+
 Open `/` for this journey. `/?journey=connected` remains an alias, and the
 original cinematic reference has moved to `/?world=old`.
 

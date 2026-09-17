@@ -1,5 +1,13 @@
 # Continuation handoff
 
+## Latest approach update (2026-09-17)
+
+The default journey starts farther away on a curved, aimed approach, speeds up
+then brakes, and crossfades into a fully lit tunnel over units 5.5-6.5. No opening
+flash or blackout. See `wormholeApproach.mjs`, `sceneBlend.js` and the first
+section of `connected-journey-experiment.md`. Build/path checks pass; visual
+review is left to the user as requested.
+
 ## Latest checkpoint (2026-09-16)
 
 The connected journey is now the default `/`; `/?journey=connected` remains

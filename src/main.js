@@ -12,6 +12,8 @@ import { applyComposeShiftProjection } from './graphics/composeShift';
 import Lenis from 'lenis';
 import { resolveSkyLayers, resolveStarGain } from './skyLayers';
 import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
+import { createSceneBlend } from './experiments/sceneBlend.js';
+import { TUNNEL_BLEND_START } from './experiments/wormholeApproach.mjs';
 
 
 (async () => {
@@ -400,6 +402,7 @@ import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
     createTunnel(window.innerWidth / window.innerHeight);
   const sharedTunnelTexture = connectedJourney ? createWorldSkyTexture() : null;
   let tunnelActive = false;
+  const tunnelBlend = connectedJourney ? createSceneBlend(renderer) : null;
 
   // Somewhere to arrive. Rendered to its own target and sampled by the shader —
   // see src/graphics/planet.js for why it does not share the particle ones.
@@ -722,7 +725,7 @@ import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
       ? JOURNEY.arrivalEnd + blackHoleProgress(routeViewportUnits) *
         (JOURNEY.approachEnd - JOURNEY.arrivalEnd)
       : routeViewportUnits;
-    storyOverlay.update(scrollViewportUnits)
+    storyOverlay.update(connectedJourney ? -1 : scrollViewportUnits)
     if (benchmarkStarted) {
       // Past the tunnel is the fall, where the raymarcher is close, the disk
       // fills the frame and the cost is worth judging by. Everything before it —
@@ -902,7 +905,7 @@ import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
       ? 1.0
       : 1.0 + 7.0 * smoothstep(clamp01((closeProgress - 0.02) / 0.30));
 
-    updateTransitionVeil(closeProgress, tunnelProgress, arrivalProgress, inTunnel);
+    updateTransitionVeil(closeProgress, tunnelProgress, arrivalProgress, inTunnel, routeViewportUnits);
 
     // Set per phase. Nothing here is allowed to sit at threshold 0 — that is what
     // bleached a whole half of the journey before.
@@ -933,7 +936,9 @@ import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
     }
 
     tunnelActive = inTunnel;
-    if (inTunnel) {
+    if (connectedJourney && routeViewportUnits >= TUNNEL_BLEND_START && routeViewportUnits <= 11.5) {
+      updateTunnel(clamp01((routeViewportUnits - TUNNEL_BLEND_START) / (11.5 - TUNNEL_BLEND_START)), 1, time);
+    } else if (inTunnel) {
       const reveal = clamp01((tunnelProgress - 0.10) / 0.14);
       updateTunnel(tunnelProgress, reveal, time);
     }
@@ -1011,6 +1016,9 @@ import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
       bloomPass.strength = galaxyFrame.reduced ? 0.35 : 0.7 + galaxyFrame.state.streak * 0.2;
       bloomPass.radius = 0.55;
       bloomPass.threshold = 0.4;
+      if (galaxyFrame.tunnelBlend > 0) {
+        bloomPass.strength = 0.9; bloomPass.radius = 1.0; bloomPass.threshold = 0.55;
+      }
     }
 
     // slowly revolve particles around the BH when toggle is on
@@ -1067,6 +1075,17 @@ import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
       renderPass.scene = galaxyFrame.scene;
       renderPass.camera = galaxyFrame.camera;
       renderer.setRenderTarget(null);
+      if (galaxyFrame.tunnelBlend > 0) {
+        tunnelBlend.render(galaxyFrame.tunnelBlend, galaxyFrame.render, () => {
+          renderPass.scene = tunnelScene; renderPass.camera = tunnelCamera;
+          const renderToScreen = composer.renderToScreen;
+          try {
+            composer.renderToScreen = false; composer.render();
+            return composer.readBuffer.texture;
+          } finally { composer.renderToScreen = renderToScreen; }
+        });
+        return;
+      }
       if (galaxyFrame.render) galaxyFrame.render();
       else if (galaxyFrame.direct) renderer.render(galaxyFrame.scene, galaxyFrame.camera);
       else composer.render();
@@ -1150,7 +1169,13 @@ import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
 
   // Black going in, white coming out. Both scene swaps happen while this is
   // fully opaque, so neither is ever visible.
-  function updateTransitionVeil(closeProgress, tunnelProgress, arrivalProgress, inTunnel) {
+  function updateTransitionVeil(closeProgress, tunnelProgress, arrivalProgress, inTunnel, routeUnits) {
+    if (connectedJourney && routeUnits < 11.1) {
+      if (transitionVeil) transitionVeil.style.opacity = '0';
+      if (cockpitVignette) cockpitVignette.style.opacity = '0';
+      veilColor = ''; veilOpacity = -1; vignetteOpacity = -1;
+      return;
+    }
     let color = '#000000'
     let opacity = 0
 
@@ -1274,6 +1299,7 @@ import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
     travel?.dispose();
     disposeParticleSystem();
     disposeTunnel();
+    tunnelBlend?.dispose();
     sharedTunnelTexture?.dispose();
     planet?.disposePlanet();
     disposeShaderPlane();

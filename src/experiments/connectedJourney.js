@@ -2,6 +2,7 @@ import { createFreeWorld } from './freeWorld.js';
 import { departureAt, blackHoleProgress } from './galaxyDeparture.mjs';
 import { createWorldWormhole } from './worldWormhole.js';
 import { createWorldBlackHole } from './worldBlackHole.js';
+import { wormholeApproach } from './wormholeApproach.mjs';
 import './connectedJourney.css';
 
 export async function createConnectedJourney(renderer) {
@@ -34,16 +35,15 @@ export async function createConnectedJourney(renderer) {
       world.setGalaxyVisible(units > 11.5);
       world.setDestination(atWormhole ? wormhole : atBlackHole ? blackHole : null);
       if (atWormhole) {
-        const t = Math.max(0, Math.min(1, units / 5));
-        const approach = t * t * (3 - 2 * t);
-        world.update(0, !active, [8 * approach, 0, -38.5 * approach]);
+        const approach = wormholeApproach(units);
+        world.update(0, !active, approach);
         active = true;
         panel.dataset.activeScene = 'wormhole';
         panel.querySelector('[data-status]').textContent = 'Wormhole approach';
         const marker = document.querySelector('.guided-stage');
         if (marker) marker.textContent = 'Wormhole approach';
         return { scene: world.scene, camera: world.camera, direct: true,
-          render: () => wormhole.render(), preserveVeil: true,
+          render: () => wormhole.render(), tunnelBlend: approach.tunnelBlend,
           reduced: world.gentle, state: { veil: 0, streak: 0 } };
       }
       if (units > 37) {
