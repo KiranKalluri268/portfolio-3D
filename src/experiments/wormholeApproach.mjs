@@ -2,7 +2,7 @@ const clamp = value => Math.max(0, Math.min(1, value));
 export const TUNNEL_BLEND_START = 6.2;
 export const TUNNEL_BLEND_END = 7.2;
 export const THROAT_FUNNEL_START = 4.0;
-export const CAVE_ENTRY_RADIUS = 0.38;
+export const CAVE_ENTRY_RADIUS = 0.24;
 
 export function caveRadiusAt(units) {
   const t = clamp((units - THROAT_FUNNEL_START) / (TUNNEL_BLEND_END - THROAT_FUNNEL_START));
