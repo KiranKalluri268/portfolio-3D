@@ -40,7 +40,7 @@ vec3 funnelSky(vec3 ray, vec3 view, float funnel, float travel, float caveRadius
   vec3 right = perpendicular(vec3(1, 0, 0), view);
   vec3 up = normalize(cross(right, view));
   vec2 aperture = vec2(dot(ray, right), dot(ray, up)) / max(dot(ray, view), 0.08);
-  // Keep the optical passage on the camera axis; introduce bends only inside.
+  aperture -= vec2(0.10, -0.055) * funnel;
   float radius = max(length(aperture), 0.012);
   // Scroll controls the optical bore independently of the funnel morph.
   // The tunnel inherits its final radius; the exterior lens never shrinks.

@@ -358,10 +358,10 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
   const skyBackground = skyBackgroundMaterial ? new THREE.Mesh(entry.geometry, skyBackgroundMaterial) : null;
   if (skyBackground) { skyBackground.frustumCulled = false; skyBackground.renderOrder = -10; scene.add(skyBackground); }
 
-  function setEntry({ camera: source, funnel, caveRadius }) {
+  function setEntry({ camera: source, position: sourcePosition, funnel, caveRadius }) {
     uniforms.entryProjectionInverse.value.copy(source.projectionMatrixInverse);
     uniforms.entryRotation.value.setFromMatrix4(source.matrixWorld);
-    source.getWorldDirection(uniforms.entryView.value);
+    uniforms.entryView.value.set(8 - sourcePosition[0], -sourcePosition[1], -40 - sourcePosition[2]).normalize();
     uniforms.entryFunnel.value = funnel;
     uniforms.entryCaveRadius.value = caveRadius;
   }

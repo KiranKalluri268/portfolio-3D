@@ -1,13 +1,11 @@
 const clamp = value => Math.max(0, Math.min(1, value));
 export const TUNNEL_BLEND_START = 6.2;
 export const TUNNEL_BLEND_END = 7.2;
-export const TUNNEL_VISUAL_HANDOFF = 6.45;
 export const THROAT_FUNNEL_START = 4.0;
-export const CAVE_ENTRY_RADIUS = 0.19;
+export const CAVE_ENTRY_RADIUS = 0.24;
 
 export function caveRadiusAt(units) {
   const t = clamp((units - THROAT_FUNNEL_START) / (TUNNEL_BLEND_END - THROAT_FUNNEL_START));
-  if (t === 1) return CAVE_ENTRY_RADIUS;
   // A separate contraction curve keeps tightening through the final approach.
   // Zero endpoint velocity prevents a snap when the tunnel takes over.
   const contraction = t * t * t * (t * (t * 6 - 15) + 10);
@@ -22,7 +20,7 @@ export function wormholeApproach(units, aspect = 1881 / 913) {
   const weights = [(1-q)**3, 3*(1-q)**2*q, 3*(1-q)*q*q, q**3];
   const position = [0, 1, 2].map(axis => points.reduce((sum, p, i) => sum + p[axis] * weights[i], 0));
   const dx = 8 - position[0], dy = -position[1], dz = -40 - position[2];
-  const blend = clamp((units - TUNNEL_BLEND_START) / (TUNNEL_VISUAL_HANDOFF - TUNNEL_BLEND_START));
+  const blend = clamp((units - TUNNEL_BLEND_START) / (TUNNEL_BLEND_END - TUNNEL_BLEND_START));
   const funnel = clamp((units - THROAT_FUNNEL_START) / (TUNNEL_BLEND_END - THROAT_FUNNEL_START));
   // Match the reference's upper-right opening, then gradually aim into the
   // mouth. Tracking its center from frame one disguises the sideways flight.
