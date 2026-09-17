@@ -244,8 +244,9 @@ const fragmentShader = /* glsl */ `
     // Surface relief is secondary to the transmitted world, not an orange coat.
     cloudWall += vec3(0.065, 0.075, 0.09) * wall * entryDetail;
     cloudWall = mix(cloudWall, entrySky(vClip.xy / vClip.w), smoothstep(0.86, 1.0, toExit));
-    float arrival = smoothstep(0.2, 1.0, uExitGlow);
-    color = mix(cloudWall, color, arrival);
+    // Never return to the legacy orange material halfway through the cave.
+    // The sky remains the wall surface until the final exit-light handoff.
+    color = mix(cloudWall, uExitLight, entryExit);
     #endif
 
     gl_FragColor = vec4(color * uReveal, 1.0);
@@ -301,6 +302,7 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
     entryTravel: { value: 0 },
     entryWalls: { value: 0 },
     entryDetail: { value: 0 },
+    entryExit: { value: 0 },
     uStarTex: { value: null },
     uBgTex: { value: null },
     uSkyAmount: { value: 1.0 },
@@ -348,9 +350,9 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
     uniforms, depthTest: false, depthWrite: false,
     vertexShader: entryMaterial.vertexShader,
     fragmentShader: `${destinationSky}\n${entryShader}\nvarying vec2 ndc;
-      uniform vec3 uExitLight; uniform float uExitGlow;
+      uniform vec3 uExitLight;
       void main(){ gl_FragColor = vec4(mix(entrySky(ndc), uExitLight,
-        smoothstep(0.2, 1.0, uExitGlow)), 1.0); }`,
+        entryExit), 1.0); }`,
   }) : null;
   const skyBackground = skyBackgroundMaterial ? new THREE.Mesh(entry.geometry, skyBackgroundMaterial) : null;
   if (skyBackground) { skyBackground.frustumCulled = false; skyBackground.renderOrder = -10; scene.add(skyBackground); }
@@ -397,6 +399,7 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
       uniforms.entryWalls.value = optical.walls;
       uniforms.entryDetail.value = optical.detail;
       uniforms.entryTravel.value = optical.travel;
+      uniforms.entryExit.value = optical.exit;
       entry.visible = optical.walls < 1;
     }
     const fov = THREE.MathUtils.lerp(entryFov, 78, entryRelease);

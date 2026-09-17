@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { wormholeApproach, TUNNEL_BLEND_START, TUNNEL_BLEND_END } from './wormholeApproach.mjs';
+import { wormholeApproach, TUNNEL_BLEND_START, TUNNEL_BLEND_END, THROAT_FUNNEL_START } from './wormholeApproach.mjs';
 
 const distance = position => Math.hypot(position[0] - 8, position[1], position[2] + 40);
 const speed = units => {
@@ -26,7 +26,8 @@ test('blend is bounded and reversible, with exact endpoints', () => {
   assert.equal(wormholeApproach(TUNNEL_BLEND_START).tunnelBlend, 0);
   assert.equal(wormholeApproach((TUNNEL_BLEND_START + TUNNEL_BLEND_END) / 2).tunnelBlend, .5);
   assert.equal(wormholeApproach(TUNNEL_BLEND_END).tunnelBlend, 1);
-  assert.equal(wormholeApproach(4.7).throatFunnel, 0);
+  assert.equal(wormholeApproach(THROAT_FUNNEL_START).throatFunnel, 0);
+  assert.ok(wormholeApproach(4.7).throatFunnel > .1, 'cave forms before the previous onset');
   assert.ok(wormholeApproach(5.5).throatFunnel > 0, 'funnel develops before the tunnel blend');
   assert.equal(wormholeApproach(TUNNEL_BLEND_END).throatFunnel, 1);
   assert.deepEqual(wormholeApproach(-2), wormholeApproach(0));

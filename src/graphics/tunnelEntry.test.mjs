@@ -7,9 +7,9 @@ import { wormholeApproach, TUNNEL_BLEND_START, TUNNEL_BLEND_END } from '../exper
 test('optical handoff finishes before geometry, motion and bloom appear', () => {
   for (let units = TUNNEL_BLEND_START; units <= TUNNEL_BLEND_END; units += .01) {
     const state = tunnelEntryAt((units - TUNNEL_BLEND_START) / (11.5 - TUNNEL_BLEND_START));
-    assert.deepEqual(state, { walls: 0, detail: 0, travel: 0, bloom: 0 });
+    assert.deepEqual(state, { walls: 0, detail: 0, travel: 0, bloom: 0, exit: 0 });
   }
-  assert.deepEqual(tunnelEntryAt(ENTRY_HANDOFF), { walls: 0, detail: 0, travel: 0, bloom: 0 });
+  assert.deepEqual(tunnelEntryAt(ENTRY_HANDOFF), { walls: 0, detail: 0, travel: 0, bloom: 0, exit: 0 });
   const end = tunnelEntryAt(1);
   assert.equal(end.walls, 1); assert.equal(end.detail, 1); assert.equal(end.bloom, 1);
 });
@@ -20,12 +20,18 @@ test('entry progression is continuous, monotonic and reversible', () => {
     const state = tunnelEntryAt(p);
     for (const key of Object.keys(state)) {
       assert.ok(state[key] >= previous[key]);
-      assert.ok(state[key] - previous[key] < .01);
+      assert.ok(state[key] - previous[key] < (key === 'exit' ? .026 : .01));
     }
     previous = state;
   }
   const samples = [0, ENTRY_HANDOFF, .3, .6, 1];
   assert.deepEqual(samples.map(tunnelEntryAt), samples.reverse().map(tunnelEntryAt).reverse());
+});
+
+test('sky texture persists through the cave until the final exit handoff', () => {
+  for (const p of [0, .25, .5, .75, .9, .94]) assert.equal(tunnelEntryAt(p).exit, 0);
+  assert.ok(Math.abs(tunnelEntryAt(.97).exit - .5) < 1e-12);
+  assert.equal(tunnelEntryAt(1).exit, 1);
 });
 
 test('entrance projection reconstructs the same wormhole rays across aspect ratios and look offsets', () => {

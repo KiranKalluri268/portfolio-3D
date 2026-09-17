@@ -14,5 +14,7 @@ export function tunnelEntryAt(progress) {
     detail: smooth(progress, ENTRY_HANDOFF, 0.65),
     travel: Math.max(0, progress - ENTRY_HANDOFF) ** 2 * 1.4,
     bloom: smooth(progress, ENTRY_HANDOFF, 0.6),
+    // Keep the sky walls for the whole passage; only the final exit fades out.
+    exit: smooth(progress, 0.94, 1),
   };
 }

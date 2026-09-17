@@ -42,10 +42,13 @@ vec3 funnelSky(vec3 ray, vec3 view, float funnel, float travel) {
   vec2 aperture = vec2(dot(ray, right), dot(ray, up)) / max(dot(ray, view), 0.08);
   aperture -= vec2(0.10, -0.055) * funnel;
   float radius = max(length(aperture), 0.012);
-  float depth = log(1.0 + 1.8 / radius);
-  float azimuth = atan(aperture.y, aperture.x) + depth * 0.22 * funnel + travel;
+  // Tighten the optical bore by 35% at full morph, without shrinking the
+  // physical mouth or changing the exterior lens. Both scenes share this bend.
+  float boreRadius = mix(1.0, 0.65, funnel);
+  float depth = log(1.0 + 2.4 / radius);
+  float azimuth = atan(aperture.y, aperture.x) + depth * 0.30 * funnel + travel;
   vec3 around = right * cos(azimuth) + up * sin(azimuth);
-  float angle = 1.45 * (1.0 - exp(-radius * (1.0 + 3.0 * funnel)));
+  float angle = 1.45 * (1.0 - exp(-radius * (1.0 + 3.0 * funnel) / boreRadius));
   vec3 wallRay = view * cos(angle) + around * sin(angle);
   return destinationSky(normalize(wallRay)) * mix(0.65, 1.15, smoothstep(0.0, 1.0, radius));
 }

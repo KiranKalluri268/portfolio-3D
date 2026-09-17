@@ -1,6 +1,7 @@
 const clamp = value => Math.max(0, Math.min(1, value));
 export const TUNNEL_BLEND_START = 6.2;
 export const TUNNEL_BLEND_END = 7.2;
+export const THROAT_FUNNEL_START = 4.0;
 
 export function wormholeApproach(units, aspect = 1881 / 913) {
   const t = clamp(units / TUNNEL_BLEND_END);
@@ -11,7 +12,7 @@ export function wormholeApproach(units, aspect = 1881 / 913) {
   const position = [0, 1, 2].map(axis => points.reduce((sum, p, i) => sum + p[axis] * weights[i], 0));
   const dx = 8 - position[0], dy = -position[1], dz = -40 - position[2];
   const blend = clamp((units - TUNNEL_BLEND_START) / (TUNNEL_BLEND_END - TUNNEL_BLEND_START));
-  const funnel = clamp((units - 4.7) / (TUNNEL_BLEND_END - 4.7));
+  const funnel = clamp((units - THROAT_FUNNEL_START) / (TUNNEL_BLEND_END - THROAT_FUNNEL_START));
   // Match the reference's upper-right opening, then gradually aim into the
   // mouth. Tracking its center from frame one disguises the sideways flight.
   const framing = 1 - q * q * (3 - 2 * q);
