@@ -253,7 +253,7 @@ const fragmentShader = /* glsl */ `
   }
 `;
 
-export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius = radius, entryFov = 78, sky = null } = {}) {
+export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, lengthScale = 1, entryRadius = radius, entryFov = 78, sky = null } = {}) {
   const scene = new THREE.Scene();
 
   // What fills the aperture at the far end. The tube is closed all the way
@@ -269,11 +269,12 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, entryRadius =
   const camera = new THREE.PerspectiveCamera(78, aspect, 0.1, 2000);
 
   const curve = new THREE.CatmullRomCurve3(
-    TUNNEL_PATH.map(([x, y, z]) => new THREE.Vector3(x, y, z))
+    // Scale the whole centerline so arc length grows by exactly the same ratio.
+    TUNNEL_PATH.map(([x, y, z]) => new THREE.Vector3(x, y, z).multiplyScalar(lengthScale))
   );
   // Enough tubular segments that the bends are smooth at this length — the wall
   // is only ever a few units from the camera, so faceting shows.
-  const geometry = new THREE.TubeGeometry(curve, 400, radius, 48, false);
+  const geometry = new THREE.TubeGeometry(curve, Math.ceil(400 * lengthScale), radius, 48, false);
   // Match the wormhole's physical mouth, then flare into the wider passage.
   // Scale each ring about its own curve center, preserving the curved path.
   if (entryRadius !== radius) {

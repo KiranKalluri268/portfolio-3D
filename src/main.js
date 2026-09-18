@@ -15,6 +15,7 @@ import { blackHoleProgress } from './experiments/galaxyDeparture.mjs';
 import { createSceneBlend } from './experiments/sceneBlend.js';
 import { TUNNEL_BLEND_START } from './experiments/wormholeApproach.mjs';
 import { tunnelEntryAt } from './graphics/tunnelEntry.mjs';
+import { tunnelScrollDelta } from './experiments/tunnelScroll.mjs';
 
 
 (async () => {
@@ -401,7 +402,7 @@ import { tunnelEntryAt } from './graphics/tunnelEntry.mjs';
   // it inherits bloom without a second post-processing chain.
   const { tunnelScene, tunnelCamera, updateTunnel, resizeTunnel, disposeTunnel, setTunnelTextures, setTunnelEntry } =
     createTunnel(window.innerWidth / window.innerHeight, connectedJourney
-      ? { radius: 4.8, entryRadius: 2, entryFov: 70, sky: travel.tunnelSky }
+      ? { radius: 7.2, lengthScale: 1.5, entryRadius: 2, entryFov: 70, sky: travel.tunnelSky }
       : {});
   let tunnelActive = false;
   const tunnelBlend = connectedJourney ? createSceneBlend(renderer) : null;
@@ -684,6 +685,15 @@ import { tunnelEntryAt } from './graphics/tunnelEntry.mjs';
   const lenis = new Lenis({
     lerp: 0.1, // Smoothness
     smoothWheel: true,
+    virtualScroll(data) {
+      // Wheel and trackpad input only; navigation buttons retain exact targets.
+      // Other journeys retain their existing input response.
+      if (connectedJourney && data.event.type === 'wheel') {
+        const height = Math.max(1, window.innerHeight);
+        data.deltaY = tunnelScrollDelta(lenis.targetScroll / height, data.deltaY / height) * height;
+      }
+      return true;
+    },
   });
   lenis.stop();
   travel?.setNavigator((units) => {
