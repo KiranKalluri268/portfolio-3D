@@ -4,6 +4,7 @@ import { createWorldWormhole } from './worldWormhole.js';
 import { createWorldBlackHole } from './worldBlackHole.js';
 import { wormholeApproach, TUNNEL_BLEND_END } from './wormholeApproach.mjs';
 import './connectedJourney.css';
+import { canFreeFly } from './journeyFlightMode.mjs';
 
 export async function createConnectedJourney(renderer) {
   const world = await createFreeWorld({ externalRenderer: renderer });
@@ -21,9 +22,40 @@ export async function createConnectedJourney(renderer) {
   nav.innerHTML = '<button data-unit="0">Wormhole</button><button data-unit="9">Tunnel</button><button data-unit="13">Open space</button><button data-unit="21.25">Fast travel</button><button data-unit="31">Galaxy</button><button data-unit="34">Hyperspace 2</button><button data-unit="40">Black hole</button>';
   panel.appendChild(nav);
   let navigate = () => {}, active = false;
+  let onFreeFlightChange = () => {}, freeFlight = false, currentUnits = 0;
+  let freeDestination = null;
+  const freeLabel = document.createElement('label');
+  freeLabel.innerHTML = '<input type="checkbox" data-free-flight> Free flight (pause journey)';
+  panel.querySelector('.guided-controls').prepend(freeLabel);
+  const freeControl = freeLabel.querySelector('input');
+  const journeyInstructions = panel.querySelector('[data-instructions]').textContent;
+  function setFreeFlight(value) {
+    if (value && !canFreeFly(currentUnits)) return;
+    freeFlight = value;
+    freeControl.checked = value;
+    freeDestination = panel.dataset.activeScene === 'wormhole' ? wormhole
+      : panel.dataset.activeScene === 'black-hole' ? blackHole : null;
+    world.setFreeFlight(value);
+    document.body.classList.toggle('connected-free-flight', value);
+    panel.querySelector('[data-look]').disabled = value;
+    panel.querySelector('[data-instructions]').textContent = value
+      ? 'Click Enter world to capture the cursor. Scroll to fly where you look; WASD / arrows slide. Escape releases the cursor. Uncheck Free flight to return to the saved journey position.'
+      : journeyInstructions;
+    if (value && freeDestination === wormhole) wormhole.setFunnel(0);
+    active = false;
+    onFreeFlightChange(value);
+  }
+  freeControl.addEventListener('change', () => setFreeFlight(freeControl.checked));
+  panel.querySelector('[data-restart]').addEventListener('click', () => {
+    if (freeFlight) setFreeFlight(false);
+    navigate(0);
+  });
   let entryPose = wormholeApproach(TUNNEL_BLEND_END);
   nav.addEventListener('click', event => {
-    if (event.target.dataset.unit !== undefined) navigate(Number(event.target.dataset.unit));
+    if (event.target.dataset.unit !== undefined) {
+      if (freeFlight) setFreeFlight(false);
+      navigate(Number(event.target.dataset.unit));
+    }
   });
   return {
     tunnelSky: wormhole.sky,
@@ -33,7 +65,21 @@ export async function createConnectedJourney(renderer) {
     },
     setTextures() {},
     setNavigator(callback) { navigate = callback; },
+    setFreeFlightHandler(callback) { onFreeFlightChange = callback; },
+    get freeFlight() { return freeFlight; },
     update(units) {
+      if (freeFlight) {
+        world.update(0, !active);
+        active = true;
+        const marker = document.querySelector('.guided-stage');
+        if (marker) marker.textContent = 'Free flight · Esc releases cursor';
+        return { scene: world.scene, camera: world.camera, direct: true,
+          render: freeDestination ? () => freeDestination.render() : () => renderer.render(world.scene, world.camera),
+          reduced: world.gentle, state: { veil: 0, streak: 0 } };
+      }
+      currentUnits = units;
+      freeControl.disabled = !canFreeFly(units);
+      freeLabel.title = freeControl.disabled ? 'Free flight is available outside the tunnel.' : 'Explore from your current position.';
       const atWormhole = units <= TUNNEL_BLEND_END;
       entryPose = wormholeApproach(Math.min(units, TUNNEL_BLEND_END),
         renderer.domElement.clientWidth / renderer.domElement.clientHeight);
@@ -109,6 +155,6 @@ export async function createConnectedJourney(renderer) {
     inspect() { return { destination: world.panel.dataset.activeScene === 'wormhole'
       ? wormhole.inspect(world.camera) : world.panel.dataset.activeScene === 'black-hole'
       ? blackHole.inspect(world.camera) : null }; },
-    dispose() { wormhole.dispose(); blackHole.dispose(); world.dispose(); document.body.classList.remove('connected-world', 'guided-world'); },
+    dispose() { wormhole.dispose(); blackHole.dispose(); world.dispose(); document.body.classList.remove('connected-world', 'guided-world', 'connected-free-flight'); },
   };
 }

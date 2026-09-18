@@ -18,7 +18,7 @@ export function createGuidedWorld({ scene, camera, panel, canvas, options, starM
   panel.querySelector('.world-footnote').textContent = 'Galaxy geometry is a placeholder, not the final portfolio layout.';
   const controls = document.createElement('div');
   controls.className = 'guided-controls';
-  controls.innerHTML = '<label><input type="checkbox" data-look> Look around with cursor</label><label><input type="checkbox" data-gentle> Gentle motion (no trails)</label><button type="button" data-restart>Restart journey</button><button type="button" data-collapse>Hide panel</button>';
+  controls.innerHTML = '<label><input type="checkbox" data-look checked> Look around with cursor</label><label><input type="checkbox" data-gentle> Gentle motion (no trails)</label><button type="button" data-restart>Restart journey</button><button type="button" data-collapse>Hide panel</button>';
   panel.appendChild(controls);
   const restore = document.createElement('button');
   restore.className = 'guided-restore'; restore.textContent = 'Show controls'; restore.hidden = true;

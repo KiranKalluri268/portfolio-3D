@@ -151,6 +151,7 @@ const STRAFE_KEYS = {
 let lastTime = performance.now(), lastStatus = 0, frame = 0;
 let disposed = false;
 let guided = null;
+let freeFlight = false;
 let destination = null;
 
 function updateCells() {
@@ -215,7 +216,7 @@ function resize() {
 }
 
 async function capture() {
-  if (guided) return;
+  if (guided && !freeFlight) return;
   if (document.pointerLockElement === canvas) return;
   try {
     // Standard pointer lock gives unlimited relative mouse movement, with no
@@ -234,6 +235,9 @@ document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === canvas;
   document.body.classList.toggle('world-locked', locked);
   pendingDistance = 0; heldKeys.clear(); strafeVelocity.set(0, 0);
+  // Returning to the guided journey must not overwrite its instructions or
+  // move keyboard focus onto the now-hidden capture button.
+  if (guided && !freeFlight) return;
   instructions.textContent = 'Click to capture the mouse. Look freely, scroll to travel where you face, and use W/A/S/D or the arrows to slide up, down, left and right.';
   if (!locked) enter.focus({ preventScroll: true });
 }, options);
@@ -306,12 +310,12 @@ function update(now, progress, positionOverride) {
       worldPosition.addScaledVector(cameraUp, strafeVelocity.y * dt);
     } else strafeVelocity.set(0, 0);
   }
-  if (guided) {
+  if (guided && !freeFlight) {
     const pose = guided.update(dt, progress);
     worldPosition.set(...pose.position);
     yaw = pose.yaw; pitch = pose.pitch;
   }
-  if (positionOverride) {
+  if (positionOverride && !freeFlight) {
     worldPosition.set(...(positionOverride.position ?? positionOverride));
     yaw += positionOverride.yaw ?? 0;
     pitch += positionOverride.pitch ?? 0;
@@ -347,7 +351,7 @@ function update(now, progress, positionOverride) {
   previousRotation.copy(camera.quaternion);
   resetTrail = false;
   if (now - lastStatus > 150) {
-    status.textContent = guided ? guided.status() : `Position ${worldPosition.toArray().map((n) => n.toFixed(1)).join(' / ')} · ${speed}× · ${chunks.size} cells · ${chunks.size * STARS_PER_CELL} stars loaded`;
+    status.textContent = guided && !freeFlight ? guided.status() : `Position ${worldPosition.toArray().map((n) => n.toFixed(1)).join(' / ')} · ${speed}× · ${chunks.size} cells · ${chunks.size * STARS_PER_CELL} stars loaded`;
     lastStatus = now;
   }
   if (!externalRenderer) frame = requestAnimationFrame(update);
@@ -414,6 +418,18 @@ async function start() {
 await start();
 return {
   scene, camera, panel, dispose, starMaterial: material,
+  setFreeFlight(value) {
+    freeFlight = value;
+    pendingDistance = 0; heldKeys.clear(); strafeVelocity.set(0, 0);
+    resetTrail = true;
+    enter.hidden = !value;
+    panel.querySelector('.world-settings').hidden = !value;
+    panel.querySelector('[data-reset]').hidden = !!externalRenderer;
+    if (!value && document.pointerLockElement === canvas) document.exitPointerLock();
+    canvas.setAttribute('aria-label', value
+      ? 'Free flight: click to capture mouse, scroll to travel, WASD or arrows to slide.'
+      : 'Scroll-driven journey through space');
+  },
   setDestination(value) { if (destination !== value) resetTrail = true; destination = value; },
   setGalaxyVisible(value) { guided?.setVisible(value); },
   update(progress, reset = false, positionOverride) {

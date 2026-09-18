@@ -688,7 +688,7 @@ import { tunnelScrollDelta } from './experiments/tunnelScroll.mjs';
     virtualScroll(data) {
       // Wheel and trackpad input only; navigation buttons retain exact targets.
       // Other journeys retain their existing input response.
-      if (connectedJourney && data.event.type === 'wheel') {
+      if (connectedJourney && !travel.freeFlight && data.event.type === 'wheel') {
         const height = Math.max(1, window.innerHeight);
         data.deltaY = tunnelScrollDelta(lenis.targetScroll / height, data.deltaY / height) * height;
       }
@@ -696,6 +696,13 @@ import { tunnelScrollDelta } from './experiments/tunnelScroll.mjs';
     },
   });
   lenis.stop();
+  travel?.setFreeFlightHandler?.((enabled) => {
+    if (enabled) {
+      // Cancel pending scroll momentum before pausing the journey timeline.
+      lenis.scrollTo(lenis.scroll, { immediate: true, force: true });
+      lenis.stop();
+    } else if (loadingOverlayDismissed) lenis.start();
+  });
   travel?.setNavigator((units) => {
     if (loadingOverlayDismissed) lenis.scrollTo(units * window.innerHeight, { immediate: true });
   });
