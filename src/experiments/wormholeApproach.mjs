@@ -30,7 +30,8 @@ export function wormholeApproach(units, aspect = 1881 / 913) {
   const verticalOffset = Math.atan(.43 * Math.tan(verticalFov / 2));
   return { position, yaw: -Math.atan2(dx, -dz) + horizontalOffset * framing,
     pitch: Math.atan2(dy, Math.hypot(dx, dz)) - verticalOffset * framing,
-    tunnelBlend: blend * blend * (3 - 2 * blend),
+    // The tunnel becomes visible at half strength, then eases to fully opaque.
+    tunnelBlend: units < TUNNEL_BLEND_START ? 0 : 0.5 + 0.5 * blend * blend * (3 - 2 * blend),
     caveRadius: caveRadiusAt(units),
     throatFunnel: funnel * funnel * (3 - 2 * funnel) };
 }

@@ -40,8 +40,9 @@ test('approach curves from a distant view into the throat and brakes near entry'
   }
 });
 test('blend is bounded and reversible, with exact endpoints', () => {
-  assert.equal(wormholeApproach(TUNNEL_BLEND_START).tunnelBlend, 0);
-  assert.equal(wormholeApproach((TUNNEL_BLEND_START + TUNNEL_BLEND_END) / 2).tunnelBlend, .5);
+  assert.equal(wormholeApproach(TUNNEL_BLEND_START - .001).tunnelBlend, 0);
+  assert.equal(wormholeApproach(TUNNEL_BLEND_START).tunnelBlend, .5);
+  assert.equal(wormholeApproach((TUNNEL_BLEND_START + TUNNEL_BLEND_END) / 2).tunnelBlend, .75);
   assert.equal(wormholeApproach(TUNNEL_BLEND_END).tunnelBlend, 1);
   assert.equal(wormholeApproach(THROAT_FUNNEL_START).throatFunnel, 0);
   assert.ok(wormholeApproach(4.7).throatFunnel > .1, 'cave forms before the previous onset');
