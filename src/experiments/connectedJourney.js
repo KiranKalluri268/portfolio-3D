@@ -1,5 +1,5 @@
 import { createFreeWorld } from './freeWorld.js';
-import { departureAt, blackHoleProgress } from './galaxyDeparture.mjs';
+import { departureAt, blackHoleProgress, blackHoleVisible, connectedArrivalVeil } from './galaxyDeparture.mjs';
 import { createWorldWormhole } from './worldWormhole.js';
 import { createWorldBlackHole } from './worldBlackHole.js';
 import { wormholeApproach, TUNNEL_BLEND_END } from './wormholeApproach.mjs';
@@ -34,7 +34,7 @@ export async function createConnectedJourney(renderer) {
     freeFlight = value;
     freeControl.checked = value;
     freeDestination = panel.dataset.activeScene === 'wormhole' ? wormhole
-      : panel.dataset.activeScene === 'black-hole' ? blackHole : null;
+      : blackHoleVisible(currentUnits) ? blackHole : null;
     world.setFreeFlight(value);
     document.body.classList.toggle('connected-free-flight', value);
     panel.querySelector('[data-look]').disabled = value;
@@ -84,7 +84,7 @@ export async function createConnectedJourney(renderer) {
       entryPose = wormholeApproach(Math.min(units, TUNNEL_BLEND_END),
         renderer.domElement.clientWidth / renderer.domElement.clientHeight);
       if (!atWormhole) wormhole.advanceSky(performance.now() / 1000);
-      const atBlackHole = units > 37;
+      const atBlackHole = blackHoleVisible(units);
       wormhole.setVisible(atWormhole);
       blackHole.setVisible(atBlackHole);
       world.setGalaxyVisible(units > 11.5);
@@ -113,7 +113,7 @@ export async function createConnectedJourney(renderer) {
         if (marker) marker.textContent = 'Black-hole approach';
         return { scene: world.scene, camera: world.camera, direct: true,
           render: () => blackHole.render(), reduced: world.gentle,
-          state: { veil: 1 - Math.min(1, (units - 37) / 0.65), streak: 0 } };
+          state: { veil: 0, streak: 0 } };
       }
       const next = units > 11.5;
       panel.dataset.activeScene = next ? 'world' : 'tunnel';
@@ -143,17 +143,18 @@ export async function createConnectedJourney(renderer) {
       return {
         // Open space keeps the direct, bloom-free trail exposure; from the
         // deceleration on, the galaxy fills the frame and goes through bloom.
-        scene: world.scene, camera: world.camera, direct: world.gentle || units < 28, reduced: world.gentle,
+        scene: world.scene, camera: world.camera, direct: atBlackHole || world.gentle || units < 28, reduced: world.gentle,
+        // Use the same disk renderer throughout departure and close approach:
+        // no visibility swap or post-processing switch at viewport 37.
+        render: atBlackHole ? () => blackHole.render() : undefined,
         state: {
-          veil: units > 36.35
-            ? Math.min(1, (units - 36.35) / 0.65)
-            : 1 - Math.min(1, (units - 11.5) / 0.65),
+          veil: connectedArrivalVeil(units),
           streak: units > 31 ? 1 : 0,
         },
       };
     },
     inspect() { return { destination: world.panel.dataset.activeScene === 'wormhole'
-      ? wormhole.inspect(world.camera) : world.panel.dataset.activeScene === 'black-hole'
+      ? wormhole.inspect(world.camera) : blackHoleVisible(currentUnits)
       ? blackHole.inspect(world.camera) : null }; },
     dispose() { wormhole.dispose(); blackHole.dispose(); world.dispose(); document.body.classList.remove('connected-world', 'guided-world', 'connected-free-flight'); },
   };

@@ -3,6 +3,12 @@ import { journeyAt } from './guidedPath.mjs';
 export const GALAXY_UNITS = 31;
 export const BLACK_HOLE_UNITS = 37;
 export const FALL_END_UNITS = 47;
+// The black hole is already in the shared world during galaxy departure;
+// BLACK_HOLE_UNITS marks only the start of the close approach.
+export function blackHoleVisible(units) { return units >= GALAXY_UNITS; }
+export function connectedArrivalVeil(units) {
+  return Math.max(0, Math.min(1, 1 - (units - 11.5) / 0.65));
+}
 const calmSpeed = 100 / 15; // matches the end of the accepted first journey
 // Distances per viewport of scroll, integrated to preserve continuity.
 const stages = [
