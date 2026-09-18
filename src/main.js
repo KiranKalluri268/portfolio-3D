@@ -402,7 +402,7 @@ import { tunnelScrollDelta } from './experiments/tunnelScroll.mjs';
   // it inherits bloom without a second post-processing chain.
   const { tunnelScene, tunnelCamera, updateTunnel, resizeTunnel, disposeTunnel, setTunnelTextures, setTunnelEntry } =
     createTunnel(window.innerWidth / window.innerHeight, connectedJourney
-      ? { radius: 7.2, lengthScale: 1.5, entryRadius: 2, entryFov: 70, sky: travel.tunnelSky }
+      ? { radius: 7.2, lengthScale: 2, entryRadius: 2, entryFov: 70, sky: travel.tunnelSky }
       : {});
   let tunnelActive = false;
   const tunnelBlend = connectedJourney ? createSceneBlend(renderer) : null;

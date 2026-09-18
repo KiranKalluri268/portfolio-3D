@@ -3,6 +3,7 @@ uniform float exteriorLensing;
 
 uniform float throatFunnel;
 uniform float caveRadius;
+uniform vec3 funnelView;
 uniform vec3 localCamera;
 uniform mat4 localToClip;
 varying vec3 localSurface;
@@ -79,7 +80,7 @@ void main() {
   if (throatFunnel > 0.0) {
     // Finish on the exact mapping used at the tunnel entrance. The curved-ray
     // lens remains untouched outside this late, scroll-driven morph.
-    transmitted = mix(transmitted, funnelSky(ray, view, throatFunnel, 0.0, caveRadius), throatFunnel);
+    transmitted = mix(transmitted, funnelSky(ray, funnelView, throatFunnel, 0.0, caveRadius), throatFunnel);
   }
   // Put the optical surface at the lens plane so foreground stars stay in
   // front. Ray-path length is not the depth of the apparent throat image.

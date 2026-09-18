@@ -29,6 +29,7 @@ export async function createWorldWormhole(scene, renderer, camera, starMaterial)
       skyDrift: { value: 0 },
       throatFunnel: { value: 0 },
       caveRadius: { value: 1 },
+      funnelView: { value: new THREE.Vector3(0, 0, -1) },
       localCamera: { value: new THREE.Vector3() },
       localToClip: { value: new THREE.Matrix4() },
     },
@@ -45,6 +46,7 @@ export async function createWorldWormhole(scene, renderer, camera, starMaterial)
   const inverse = new THREE.Matrix4();
   mouth.onBeforeRender = (_renderer, _scene, eye) => {
     inverse.copy(mouth.matrixWorld).invert();
+    eye.getWorldDirection(material.uniforms.funnelView.value).transformDirection(inverse);
     material.uniforms.localCamera.value.copy(eye.position).applyMatrix4(inverse);
     material.uniforms.localToClip.value.multiplyMatrices(eye.projectionMatrix, eye.matrixWorldInverse).multiply(mouth.matrixWorld);
   };

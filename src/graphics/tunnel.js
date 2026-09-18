@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import destinationSky from './destinationSky.glsl?raw';
 import entryShader from './tunnelEntry.glsl?raw';
 import { tunnelEntryAt, ENTRY_HANDOFF } from './tunnelEntry.mjs';
+import { createTunnelCurve } from './tunnelPath.mjs';
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
@@ -12,7 +13,6 @@ const WORLD_UP = new THREE.Vector3(0, 1, 0);
 // tunnel costs a few thousand triangles where the raymarcher costs hundreds of
 // ray steps per pixel.
 
-const TUNNEL_LENGTH = 400;
 const TUNNEL_RADIUS = 3.2;
 const TRAVEL_START = 0.02;  // stay clear of both end caps
 const TRAVEL_END = 0.97;
@@ -27,13 +27,6 @@ const TRAVEL_END = 0.97;
 // across the camera's near plane and you end up looking through it. Alternating
 // the sign is what makes the exit light leave the frame and come back rather
 // than drifting steadily to one side.
-const TUNNEL_PATH = [
-  [0, 0, TUNNEL_LENGTH / 2],
-  [10, -6, TUNNEL_LENGTH / 4],
-  [-14, 8, 0],
-  [12, 10, -TUNNEL_LENGTH / 4],
-  [0, 0, -TUNNEL_LENGTH / 2],
-];
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
@@ -268,10 +261,7 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, lengthScale =
   scene.background = exitLight;
   const camera = new THREE.PerspectiveCamera(78, aspect, 0.1, 2000);
 
-  const curve = new THREE.CatmullRomCurve3(
-    // Scale the whole centerline so arc length grows by exactly the same ratio.
-    TUNNEL_PATH.map(([x, y, z]) => new THREE.Vector3(x, y, z).multiplyScalar(lengthScale))
-  );
+  const curve = createTunnelCurve(lengthScale, !!sky);
   // Enough tubular segments that the bends are smooth at this length — the wall
   // is only ever a few units from the camera, so faceting shows.
   const geometry = new THREE.TubeGeometry(curve, Math.ceil(400 * lengthScale), radius, 48, false);
@@ -359,10 +349,10 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, lengthScale =
   const skyBackground = skyBackgroundMaterial ? new THREE.Mesh(entry.geometry, skyBackgroundMaterial) : null;
   if (skyBackground) { skyBackground.frustumCulled = false; skyBackground.renderOrder = -10; scene.add(skyBackground); }
 
-  function setEntry({ camera: source, position: sourcePosition, funnel, caveRadius }) {
+  function setEntry({ camera: source, funnel, caveRadius }) {
     uniforms.entryProjectionInverse.value.copy(source.projectionMatrixInverse);
     uniforms.entryRotation.value.setFromMatrix4(source.matrixWorld);
-    uniforms.entryView.value.set(8 - sourcePosition[0], -sourcePosition[1], -40 - sourcePosition[2]).normalize();
+    source.getWorldDirection(uniforms.entryView.value);
     uniforms.entryFunnel.value = funnel;
     uniforms.entryCaveRadius.value = caveRadius;
   }
@@ -407,7 +397,8 @@ export function createTunnel(aspect = 1, { radius = TUNNEL_RADIUS, lengthScale =
     }
     const fov = THREE.MathUtils.lerp(entryFov, 78, entryRelease);
     if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
-    const drift = entryRadius === radius ? 1 : entryRelease;
+    const drift = sky ? THREE.MathUtils.smoothstep(progress, 0.43, 0.65)
+      : entryRadius === radius ? 1 : entryRelease;
 
     // Position and heading both come off the curve now. The camera is placed on
     // it and aimed a little further down it, so it banks into the turns instead
